@@ -1,0 +1,4 @@
+tiktoken
+flask
+ollama
+openai
