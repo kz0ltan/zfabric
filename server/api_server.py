@@ -24,7 +24,7 @@ class FabricAPIServer:
 
     def __init__(self, name:str="zFabric", config_path:str=None):
         if config_path is None:
-            server_config_path = os.getenv("CONFIG_PATH")
+            config_path = os.getenv("CONFIG_PATH")
         self.config = json.loads(load_file(config_path))
 
         self.app = Flask(name)
