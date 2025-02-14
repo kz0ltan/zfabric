@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 from base64 import b64encode
 import copy
 import json
@@ -21,10 +22,12 @@ import openai
 
 class FabricAPIServer:
 
-    def __init__(self, name:str="Fabric", config_path:str="config.json"):
+    def __init__(self, name:str="zFabric", config_path:str=None):
+        if config_path is None:
+            server_config_path = os.getenv("CONFIG_PATH")
         self.config = json.loads(load_file(config_path))
 
-        self.app = Flask(__name__)
+        self.app = Flask(name)
         self.app.logger.setLevel(logging.INFO)
         self.add_routes()
 
@@ -85,7 +88,7 @@ class FabricAPIServer:
         @self.app.errorhandler(404)
         def not_found(e):
             return jsonify({"error": "The requested resource was not found."}), 404
-        
+
         @self.app.errorhandler(500)
         def server_error(e):
             return jsonify({"error": "An internal server error occurred."}), 500
@@ -107,10 +110,10 @@ class FabricAPIServer:
         @self.auth_required
         def milling(pattern):
             """ Combine fabric pattern with input from user and send to OpenAI's GPT-4 model.
-        
+
             Returns:
                 JSON: A JSON response containing the generated response or an error message.
-        
+
             Raises:
                 Exception: If there is an error during the API call.
             """
@@ -136,12 +139,12 @@ class FabricAPIServer:
                     break
                 if ppath == self.config['pattern_paths'][-1]:
                     return jsonify({"error": "Pattern not found"}), 400
-        
+
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = self.variable_handler.resolve(variables, system_prompt)
-            user_prompt = self.variable_handler.resolve(variables, user_prompt)
+            system_prompt = self.variable_handler.resolve(system_prompt, variables)
+            user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
             system_message = {"role": "system", "content": system_prompt}
@@ -164,10 +167,12 @@ class VariableHandler:
         self.logger.addHandler(default_handler)
         self.logger.setLevel(logging.INFO)
 
-    def resolve(self, variables:Dict, text):
-        rtext = text
+    def resolve(self, template, variables:Dict):
         self.logger.info(f"Variables replaced: {variables}")
-        return rtext
+        return re.sub(r'{{\s*([^}\s]+)\s*}}',
+            lambda match: str(variables.get(match.group(1), match.group(0))),
+            template
+        )
 
 class AnswerGenerator:
 
@@ -218,7 +223,7 @@ class AnswerGenerator:
 
         assert endpoint is not None, "Endpoint for profile not found in config!"
         assert api_key is not None, "API key for profile not found in config!"
-        
+
         return openai.AzureOpenAI(
             azure_endpoint=endpoint,
             api_key=api_key,
@@ -380,5 +385,25 @@ class AnswerGenerator:
         else:
             raise ValueError("Unknown service {}".format(service))
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="zFabric server application")
+
+    parser.add_argument('-l', '--listen', type=str, default="localhost",
+            help="Hostname/IP to listen on")
+    parser.add_argument('-p', '--port', type=int, default=13337,
+            help="Port to listen on")
+    parser.add_argument('-d', '--debug', action="store_true", default=False,
+            help="Werkzeug debug mode")
+    parser.add_argument('-c', '--config', default="./config.json",
+            help="Path to config JSON file")
+
+    return parser.parse_args()
+
+def start():
+    """ Meant to be used by Gunicorn
+    """
+    return FabricAPIServer().app
+
 if __name__ == "__main__":
-    FabricAPIServer().app.run(host="localhost", port=13337, debug=True)
+    args = parse_arguments()
+    FabricAPIServer("zFabric", args.config).app.run(host=args.listen, port=args.port, debug=args.debug)
