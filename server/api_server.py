@@ -95,6 +95,20 @@ class FabricAPIServer:
 
     def add_routes(self):
 
+        @self.app.route("/profiles", methods=["GET"])
+        @self.auth_required
+        def list_profiles():
+            try:
+                profiles = [p for p in self.config["profiles"].keys()]
+                if "default_profile" in profiles:
+                    profiles.remove("default_profile")
+                    default_profile = self.config["profiles"]["default_profile"]
+                    profiles.insert(0, "Default: " + str(default_profile))
+                return jsonify({"response": profiles})
+            except Exception as e:
+                self.app.logger.error(f"Error occured: {e}")
+                return jsonify({"error": "An error occurred while processing the request."}), 500
+
         @self.app.route("/patterns", methods=["GET"])
         @self.auth_required
         def list_patterns():

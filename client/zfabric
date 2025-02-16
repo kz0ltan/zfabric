@@ -5,12 +5,15 @@ import json
 import os
 import requests
 import sys
+from typing import List, Dict
 
-TOKEN_PATH="/home/kzoltan/.config/zfabric/server_token"
-BASE_URL="http://websrv4.kzoltan.srv:13337"
+TOKEN_PATH="~/.config/zfabric/server_token"
+#BASE_URL="http://websrv4.kzoltan.srv:13337"
+BASE_URL="http://localhost:13337"
 
 def read_token(path):
-    with open(path, 'r') as f:
+    full_path = os.path.expanduser(path)
+    with open(full_path, 'r') as f:
         return f.read().rstrip()
 
 def validate_key_value(arg):
@@ -94,16 +97,33 @@ def print_results(response, ofile=None, stream:bool=False, usage:bool=False):
         with open(ofile, 'w') as f:
             f.write(response_text)
 
+def print_list(response_list:List[str]):
+    for elem in response_list:
+        print(elem)
+
+class CustomAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if self.default is not None and values is None:
+            # If the flag was specified without a value, set the default value
+            setattr(namespace, self.dest, self.default)
+        elif values is None:
+            # If the flag was not specified at all, set to None
+            setattr(namespace, self.dest, None)
+        else:
+            # If the flag was specified with a value, use that value
+            setattr(namespace, self.dest, values)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="zFabric client application")
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('-l', '--listpatterns', action='store_true', default=False,
-            help="List available patterns")
+    group.add_argument('-l', '--list', type=str, action=CustomAction,
+            nargs='?', choices=["profiles", "patterns"], const="patterns",
+            help="List patterns/profiles")
     group.add_argument('-p', '--pattern', default=None, help="Pattern to use")
 
     parser.add_argument('-i', '--ifile', type=file_exists, default=None,
             help="Input file path")
-    parser.add_argument('-o', '--ofile', type=file_not_exists, default=None, 
+    parser.add_argument('-o', '--ofile', type=file_not_exists, default=None,
             help="Output file path")
     #parser.add_argument('-a', '--attachment', type=file_exists, default=None,
     #        help="File attachment path or URL")
@@ -112,9 +132,9 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--usage', type=bool, default=False,
             help="Print token usage if streaming (currently the Azure API is buggy)")
 
-    parser.add_argument('-n', '--num_predict', default=None, type=int, 
+    parser.add_argument('-n', '--num_predict', default=None, type=int,
             help="Maximum number of tokens to predict")
-    parser.add_argument('-t', '--temperature', default=None, type=float, 
+    parser.add_argument('-t', '--temperature', default=None, type=float,
             help="Set temperature for the model. Increasing the temperature will make the model answer more creatively.")
     parser.add_argument('-T', '--topp', default=None, type=float,
             help="Set top-P value. Output tokens are selected from the most to least probable until the sum of their probabilities equals to top-P.")
@@ -126,7 +146,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-r', '--profile',
             help="Profile to use (defined in server config.json)")
-    parser.add_argument('--no-stream', default=False, action="store_true", 
+    parser.add_argument('--no-stream', default=False, action="store_true",
             help="Disable streaming response (default: False)")
     parser.add_argument('-m', '--model', default=None, help="Model to query")
 
@@ -135,11 +155,9 @@ if __name__ == '__main__':
     global TOKEN
     TOKEN=read_token(TOKEN_PATH)
 
-    if args.listpatterns:
-        response = send_query(BASE_URL + "/patterns")
-        patterns = response.json()["response"]
-        for pattern in patterns:
-            print(pattern)
+    if args.list:
+        response = send_query(BASE_URL + "/" + args.list)
+        print_list(response.json()["response"])
     elif args.pattern:
         url = BASE_URL + "/patterns/" + args.pattern
 
@@ -161,4 +179,5 @@ if __name__ == '__main__':
                 usage=not args.no_stream and args.usage
         )
     else:
+        # input / output only
         pass
