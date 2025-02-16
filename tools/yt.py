@@ -12,6 +12,7 @@ import isodate
 import argparse
 import sys
 
+ENV_PATH="~/.config/zfabric/.env"
 
 def get_video_id(url):
     # Extract video ID from URL
@@ -60,14 +61,14 @@ def get_comments(youtube, video_id):
 
 
 
-def main_function(url, options):
+def main_function(url, options, return_only=False):
     # Load environment variables from .env file
-    load_dotenv(os.path.expanduser("~/.config/fabric/.env"))
+    load_dotenv(os.path.expanduser(ENV_PATH))
 
     # Get YouTube API key from environment variable
     api_key = os.getenv("YOUTUBE_API_KEY")
     if not api_key:
-        print("Error: YOUTUBE_API_KEY not found in ~/.config/fabric/.env")
+        print("Error: YOUTUBE_API_KEY not found in {}".format(ENV_PATH))
         return
 
     # Extract video ID from URL
@@ -125,8 +126,11 @@ def main_function(url, options):
                 "comments": comments,
                 "metadata": metadata
             }
-            # Print JSON object
-            print(json.dumps(output, indent=2))
+            if return_only:
+                return output
+            else:
+                # Print JSON object
+                print(json.dumps(output, indent=2))
     except HttpError as e:
         print(f"Error: Failed to access YouTube API. Please check your YOUTUBE_API_KEY and ensure it is valid: {e}")
 

@@ -1,6 +1,7 @@
 python-dotenv
 tiktoken
 flask
+isodate
 ollama
 openai
 pyperclip

@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 import json
 import os
 import requests
+import select
 import sys
 from typing import List, Dict
 
 import pyperclip
+import tools.yt
 
 ENV_PATH="~/.config/zfabric/.env"
 #BASE_URL="http://websrv4.kzoltan.srv:13337"
@@ -27,12 +29,37 @@ def validate_key_value(arg):
 def parse_variables(variables):
     return dict([v.split('=') for v in variables])
 
-def read_input(path=None):
+def stdin_has_data():
+    if sys.stdin.isatty():  # No data if running interactively
+        return False
+    return select.select([sys.stdin], [], [], 0)[0] != []
+
+def get_yt_data(url):
+    options = type('', (), {
+        "duration": False,
+        "transcript": False,
+        "comments": False,
+        "metadata": False,
+        "lang": "en"
+    })()
+    return tools.yt.main_function(url, options, return_only=True)
+
+def read_input(path=None, yt_url=None):
+    input_data = {"input": None}
+
     if args.ifile:
-        input_data = open(args.ifile, 'r').read()
-    else:
-        input_data = sys.stdin.read().rstrip()
-    return {'input': input_data}
+        input_data["input"] = open(args.ifile, 'r').read()
+    elif stdin_has_data():
+        input_data["input"] = sys.stdin.read().rstrip()
+
+    if yt_url:
+        yt_data = get_yt_data(yt_url)
+        if input_data["input"] is None:
+            input_data["input"] = yt_data
+        else:
+            input_data["yt_input"] = yt_data
+
+    return input_data
 
 def file_exists(file_path):
     """Custom argparse type to check if the file path is valid."""
@@ -142,6 +169,8 @@ if __name__ == '__main__':
             help="Copy output to clipboard")
     #parser.add_argument('-a', '--attachment', type=file_exists, default=None,
     #        help="File attachment path or URL")
+    parser.add_argument('-y', '--youtube', type=str, default=None,
+            help="YT URL to download transcript and use it as {{input}} or {{yt_input}}")
     parser.add_argument('-v', '--variable', action='append', type=validate_key_value,
             default=list(), help="Input variables to be replaced in patterns")
     parser.add_argument('-u', '--usage', type=bool, default=False,
@@ -169,6 +198,8 @@ if __name__ == '__main__':
     variables = parse_variables(args.variable)
     load_dotenv(os.path.expanduser(ENV_PATH))
 
+    data = read_input(args.ifile, args.youtube)
+
     if args.list:
         response = send_query(BASE_URL + "/" + args.list)
         print_list(response.json()["response"],
@@ -186,7 +217,6 @@ if __name__ == '__main__':
             'stream': not args.no_stream
         }
 
-        data = read_input(args.ifile)
 
         response = send_query(url, params, data)
         print_response(
@@ -197,5 +227,5 @@ if __name__ == '__main__':
                 usage=not args.no_stream and args.usage
         )
     else:
-        # input / output only
-        pass
+        # output only
+        print(data["input"])
