@@ -7,6 +7,8 @@ import requests
 import sys
 from typing import List, Dict
 
+import pyperclip
+
 TOKEN_PATH="~/.config/zfabric/server_token"
 #BASE_URL="http://websrv4.kzoltan.srv:13337"
 BASE_URL="http://localhost:13337"
@@ -77,7 +79,7 @@ def print_usage(response_json):
         print("Completion tokens: {}".format(response_json["usage"]["completion_tokens"]))
         print("Total tokens: {}".format(response_json["usage"]["total_tokens"]))
 
-def print_results(response, ofile=None, stream:bool=False, usage:bool=False):
+def print_response(response, ofile:str=None, ccopy:bool=False, stream:bool=False, usage:bool=False):
     if stream:
         response_text = ""
         for chunk in response.iter_lines():
@@ -97,9 +99,19 @@ def print_results(response, ofile=None, stream:bool=False, usage:bool=False):
         with open(ofile, 'w') as f:
             f.write(response_text)
 
-def print_list(response_list:List[str]):
+    if ccopy is not None:
+        pyperclip.copy(response_text)
+
+def print_list(response_list:List[str], ccopy:bool=False, ofile:str=None):
     for elem in response_list:
         print(elem)
+
+    if ofile is not None:
+        with open(ofile, 'w') as f:
+            f.write(response_list)
+
+    if ccopy is not None:
+        pyperclip.copy(response_list)
 
 class CustomAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -125,6 +137,8 @@ if __name__ == '__main__':
             help="Input file path")
     parser.add_argument('-o', '--ofile', type=file_not_exists, default=None,
             help="Output file path")
+    parser.add_argument('-c', '--copy', default=False, action='store_true',
+            help="Copy output to clipboard")
     #parser.add_argument('-a', '--attachment', type=file_exists, default=None,
     #        help="File attachment path or URL")
     parser.add_argument('-v', '--variable', action='append', type=validate_key_value,
@@ -157,7 +171,10 @@ if __name__ == '__main__':
 
     if args.list:
         response = send_query(BASE_URL + "/" + args.list)
-        print_list(response.json()["response"])
+        print_list(response.json()["response"],
+                ccopy=args.copy,
+                ofile=args.ofile
+        )
     elif args.pattern:
         url = BASE_URL + "/patterns/" + args.pattern
 
@@ -172,9 +189,10 @@ if __name__ == '__main__':
         data = read_input(args.ifile)
 
         response = send_query(url, params, data)
-        print_results(
+        print_response(
                 response,
-                args.ofile,
+                ofile=args.ofile,
+                ccopy=args.copy,
                 stream=not args.no_stream,
                 usage=not args.no_stream and args.usage
         )

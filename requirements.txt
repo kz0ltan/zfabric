@@ -2,3 +2,4 @@ tiktoken
 flask
 ollama
 openai
+pyperclip
