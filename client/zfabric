@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from dotenv import load_dotenv
 import json
 import os
 import requests
@@ -9,7 +10,7 @@ from typing import List, Dict
 
 import pyperclip
 
-TOKEN_PATH="~/.config/zfabric/server_token"
+ENV_PATH="~/.config/zfabric/.env"
 #BASE_URL="http://websrv4.kzoltan.srv:13337"
 BASE_URL="http://localhost:13337"
 
@@ -63,7 +64,7 @@ def set_options(args):
 
 def send_query(url, params={}, data=None, stream:bool=False):
     headers = {
-        'Authorization': 'bearer ' + TOKEN,
+        'Authorization': 'bearer ' + os.getenv("ZF_SERVER_TOKEN"),
         'Content-Type': 'Application/json'
     }
     if data is not None:
@@ -166,8 +167,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     variables = parse_variables(args.variable)
-    global TOKEN
-    TOKEN=read_token(TOKEN_PATH)
+    load_dotenv(os.path.expanduser(ENV_PATH))
 
     if args.list:
         response = send_query(BASE_URL + "/" + args.list)

@@ -1,5 +1,8 @@
+python-dotenv
 tiktoken
 flask
 ollama
 openai
 pyperclip
+youtube-transcript-api                                                              
+google-api-python-client
