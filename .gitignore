@@ -1,3 +1,4 @@
 server/config.json
 server/local/**
 **/__pycache__
+logs/*

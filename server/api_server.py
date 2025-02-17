@@ -10,7 +10,6 @@ import logging
 import os
 from pathlib import Path
 import re
-import tiktoken
 from typing import Dict, List, Any
 
 from helpers import load_file
@@ -19,6 +18,7 @@ from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
 import ollama
 import openai
+import tiktoken
 
 class FabricAPIServer:
 

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
 import argparse
-from dotenv import load_dotenv
 import json
 import os
-import requests
 import select
 import sys
 from typing import List, Dict
 
-import pyperclip
 import tools.yt
+
+from dotenv import load_dotenv
+import pyperclip
+import requests
 
 ENV_PATH="~/.config/zfabric/.env"
 #BASE_URL="http://websrv4.kzoltan.srv:13337"

@@ -7,3 +7,4 @@ openai
 pyperclip
 youtube-transcript-api                                                              
 google-api-python-client
+gunicorn

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>hu.kzoltan.zFabric</string>
+
+        <key>ServiceDescription</key>
+        <string>Service to start up Gunicorn running zFabric</string>
+
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/<username>/.virtualenvs/zfabric/bin/gunicorn</string>
+            <string>-w</string>
+            <string>1</string>
+            <string>-b</string>
+            <string>127.0.0.1:13337</string>
+            <string>api_server:start()</string>
+        </array>
+
+        <key>WorkingDirectory</key>
+        <string>/Users/<username>/zfabric</string>
+
+        <key>StandardErrorPath</key>
+        <string>/Users/<username>/zfabric/logs/error.log</string>
+
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>CONFIG_PATH</key>
+            <string>/Users/<username>/zfabric/server/config.json</string>
+            <key>PATH</key>
+            <string>/Users/<username>/.virtualenvs/zfabric/bin</string>
+        </dict>
+
+        <key>RunAtLoad</key>
+        <false />
+    </dict>
+</plist>
