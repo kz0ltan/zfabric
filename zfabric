@@ -56,9 +56,9 @@ def read_input(path=None, yt_url=None):
     if yt_url:
         yt_data = get_yt_data(yt_url)
         if input_data["input"] is None:
-            input_data["input"] = yt_data
+            input_data["input"] = json.dumps(yt_data)
         else:
-            input_data["yt_input"] = yt_data
+            input_data["yt_input"] = json.dumps(yt_data)
 
     return input_data
 
