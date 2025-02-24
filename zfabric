@@ -13,43 +13,53 @@ from dotenv import load_dotenv
 import pyperclip
 import requests
 
-ENV_PATH="~/.config/zfabric/.env"
-#BASE_URL="http://websrv4.kzoltan.srv:13337"
-BASE_URL="http://localhost:13337"
+ENV_PATH = "~/.config/zfabric/.env"
+# BASE_URL="http://websrv4.kzoltan.srv:13337"
+BASE_URL = "http://localhost:13337"
+
 
 def read_token(path):
     full_path = os.path.expanduser(path)
-    with open(full_path, 'r') as f:
+    with open(full_path, "r") as f:
         return f.read().rstrip()
 
+
 def validate_key_value(arg):
-    if '=' not in arg:
+    if "=" not in arg:
         raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
     return arg
 
+
 def parse_variables(variables):
-    return dict([v.split('=') for v in variables])
+    return dict([v.split("=") for v in variables])
+
 
 def stdin_has_data():
     if sys.stdin.isatty():  # No data if running interactively
         return False
     return select.select([sys.stdin], [], [], 0)[0] != []
 
+
 def get_yt_data(url):
-    options = type('', (), {
-        "duration": False,
-        "transcript": False,
-        "comments": False,
-        "metadata": False,
-        "lang": "en"
-    })()
+    options = type(
+        "",
+        (),
+        {
+            "duration": False,
+            "transcript": False,
+            "comments": False,
+            "metadata": False,
+            "lang": "en",
+        },
+    )()
     return tools.yt.main_function(url, options, return_only=True)
+
 
 def read_input(path=None, yt_url=None):
     input_data = {"input": None}
 
     if args.ifile:
-        input_data["input"] = open(args.ifile, 'r').read()
+        input_data["input"] = open(args.ifile, "r").read()
     elif stdin_has_data():
         input_data["input"] = sys.stdin.read().rstrip()
 
@@ -62,6 +72,7 @@ def read_input(path=None, yt_url=None):
 
     return input_data
 
+
 def file_exists(file_path):
     """Custom argparse type to check if the file path is valid."""
     if not os.path.exists(file_path):
@@ -70,11 +81,13 @@ def file_exists(file_path):
         raise argparse.ArgumentTypeError(f"'{file_path}' is not a file.")
     return file_path
 
+
 def file_not_exists(file_path):
     """Custom argparse type to check if the file at path does not exist."""
     if os.path.exists(file_path):
         raise argparse.ArgumentTypeError(f"File '{file_path}' already exists.")
     return file_path
+
 
 def set_options(args):
     options = dict()
@@ -90,57 +103,81 @@ def set_options(args):
         options["presencepenalty"] = args.presencepenalty
     return options
 
-def send_query(url, params={}, data=None, stream:bool=False):
+
+def send_query(url, params={}, data=None, stream: bool = False):
     headers = {
-        'Authorization': 'bearer ' + os.getenv("ZF_SERVER_TOKEN"),
-        'Content-Type': 'Application/json'
+        "Authorization": "bearer " + os.getenv("ZF_SERVER_TOKEN"),
+        "Content-Type": "Application/json",
     }
     if data is not None:
-        response = requests.post(url, headers=headers, json=data, stream=params["stream"], params=params)
+        response = requests.post(
+            url, headers=headers, json=data, stream=params["stream"], params=params
+        )
     else:
         response = requests.get(url, headers=headers, params=params)
     return response
 
+
 def print_usage(response_json):
+    """Print errors from HTTP responses"""
     if "usage" in response_json:
         print()
         print("Prompt tokens: {}".format(response_json["usage"]["prompt_tokens"]))
-        print("Completion tokens: {}".format(response_json["usage"]["completion_tokens"]))
+        print(
+            "Completion tokens: {}".format(response_json["usage"]["completion_tokens"])
+        )
         print("Total tokens: {}".format(response_json["usage"]["total_tokens"]))
 
-def print_response(response, ofile:str=None, ccopy:bool=False, stream:bool=False, usage:bool=False):
+
+def print_error(response_json):
+    """Print usage data from HTTP responses"""
+    if "error" in response_json:
+        print("Error: " + response_json["error"])
+
+
+def print_response(
+    response,
+    ofile: str = None,
+    ccopy: bool = False,
+    stream: bool = False,
+    usage: bool = False,
+):
     if stream:
         response_text = ""
         for chunk in response.iter_lines():
             response_json = json.loads(chunk)
             if "response" in response_json:
                 response_text += response_json["response"]
-                print(response_json["response"], end='', flush=True)
+                print(response_json["response"], end="", flush=True)
             print_usage(response_json)
-        print("\n", end='', flush=True)
+            print_error(response_json)
+        print("\n", end="", flush=True)
     else:
         response_json = response.json()
         if "response" in response_json:
             print(response_json["response"])
         print_usage(response_json)
+        print_error(response_json)
 
     if ofile is not None:
-        with open(ofile, 'w') as f:
+        with open(ofile, "w") as f:
             f.write(response_text)
 
     if ccopy is not None:
         pyperclip.copy(response_text)
 
-def print_list(response_list:List[str], ccopy:bool=False, ofile:str=None):
+
+def print_list(response_list: List[str], ccopy: bool = False, ofile: str = None):
     for elem in response_list:
         print(elem)
 
     if ofile is not None:
-        with open(ofile, 'w') as f:
+        with open(ofile, "w") as f:
             f.write(response_list)
 
     if ccopy is not None:
         pyperclip.copy(response_list)
+
 
 class CustomAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -154,46 +191,107 @@ class CustomAction(argparse.Action):
             # If the flag was specified with a value, use that value
             setattr(namespace, self.dest, values)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="zFabric client application")
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('-l', '--list', type=str, action=CustomAction,
-            nargs='?', choices=["profiles", "patterns"], const="patterns",
-            help="List patterns/profiles")
-    group.add_argument('-p', '--pattern', default=None, help="Pattern to use")
+    group.add_argument(
+        "-l",
+        "--list",
+        type=str,
+        action=CustomAction,
+        nargs="?",
+        choices=["profiles", "patterns"],
+        const="patterns",
+        help="List patterns/profiles",
+    )
+    group.add_argument("-p", "--pattern", default=None, help="Pattern to use")
 
-    parser.add_argument('-i', '--ifile', type=file_exists, default=None,
-            help="Input file path")
-    parser.add_argument('-o', '--ofile', type=file_not_exists, default=None,
-            help="Output file path")
-    parser.add_argument('-c', '--copy', default=False, action='store_true',
-            help="Copy output to clipboard")
-    #parser.add_argument('-a', '--attachment', type=file_exists, default=None,
+    parser.add_argument(
+        "-i", "--ifile", type=file_exists, default=None, help="Input file path"
+    )
+    parser.add_argument(
+        "-o", "--ofile", type=file_not_exists, default=None, help="Output file path"
+    )
+    parser.add_argument(
+        "-c",
+        "--copy",
+        default=False,
+        action="store_true",
+        help="Copy output to clipboard",
+    )
+    # parser.add_argument('-a', '--attachment', type=file_exists, default=None,
     #        help="File attachment path or URL")
-    parser.add_argument('-y', '--youtube', type=str, default=None,
-            help="YT URL to download transcript and use it as {{input}} or {{yt_input}}")
-    parser.add_argument('-v', '--variable', action='append', type=validate_key_value,
-            default=list(), help="Input variables to be replaced in patterns")
-    parser.add_argument('-u', '--usage', type=bool, default=False,
-            help="Print token usage if streaming (currently the Azure API is buggy)")
+    parser.add_argument(
+        "-y",
+        "--youtube",
+        type=str,
+        default=None,
+        help="YT URL to download transcript and use it as {{input}} or {{yt_input}}",
+    )
+    parser.add_argument(
+        "-v",
+        "--variable",
+        action="append",
+        type=validate_key_value,
+        default=list(),
+        help="Input variables to be replaced in patterns",
+    )
+    parser.add_argument(
+        "-u",
+        "--usage",
+        type=bool,
+        default=False,
+        help="Print token usage if streaming (currently the Azure API is buggy)",
+    )
 
-    parser.add_argument('-n', '--num_predict', default=None, type=int,
-            help="Maximum number of tokens to predict")
-    parser.add_argument('-t', '--temperature', default=None, type=float,
-            help="Set temperature for the model. Increasing the temperature will make the model answer more creatively.")
-    parser.add_argument('-T', '--topp', default=None, type=float,
-            help="Set top-P value. Output tokens are selected from the most to least probable until the sum of their probabilities equals to top-P.")
-    parser.add_argument('-F', '--frequencypenalty', default=None, type=float,
-            help="Positive values penalize new tokens based on their existing frequency in the text so far, "
-                "decreasing the model's likelihood to repeat the same line verbatim.")
-    parser.add_argument('-P', '--presencepenalty', default=None, type=float,
-            help="Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.")
+    parser.add_argument(
+        "-n",
+        "--num_predict",
+        default=None,
+        type=int,
+        help="Maximum number of tokens to predict",
+    )
+    parser.add_argument(
+        "-t",
+        "--temperature",
+        default=None,
+        type=float,
+        help="Set temperature for the model. Increasing the temperature will make the model answer more creatively.",
+    )
+    parser.add_argument(
+        "-T",
+        "--topp",
+        default=None,
+        type=float,
+        help="Set top-P value. Output tokens are selected from the most to least probable until the sum of their probabilities equals to top-P.",
+    )
+    parser.add_argument(
+        "-F",
+        "--frequencypenalty",
+        default=None,
+        type=float,
+        help="Positive values penalize new tokens based on their existing frequency in the text so far, "
+        "decreasing the model's likelihood to repeat the same line verbatim.",
+    )
+    parser.add_argument(
+        "-P",
+        "--presencepenalty",
+        default=None,
+        type=float,
+        help="Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.",
+    )
 
-    parser.add_argument('-r', '--profile',
-            help="Profile to use (defined in server config.json)")
-    parser.add_argument('--no-stream', default=False, action="store_true",
-            help="Disable streaming response (default: False)")
-    parser.add_argument('-m', '--model', default=None, help="Model to query")
+    parser.add_argument(
+        "-r", "--profile", help="Profile to use (defined in server config.json)"
+    )
+    parser.add_argument(
+        "--no-stream",
+        default=False,
+        action="store_true",
+        help="Disable streaming response (default: False)",
+    )
+    parser.add_argument("-m", "--model", default=None, help="Model to query")
 
     args = parser.parse_args()
     variables = parse_variables(args.variable)
@@ -202,30 +300,28 @@ if __name__ == '__main__':
     data = read_input(args.ifile, args.youtube)
 
     if args.list:
-        response = send_query(BASE_URL + "/" + args.list)
-        print_list(response.json()["response"],
-                ccopy=args.copy,
-                ofile=args.ofile
-        )
+        response = send_query(BASE_URL + "/" + args.list).json()
+        print_error(response)
+        if "response" in response:
+            print_list(response["response"], ccopy=args.copy, ofile=args.ofile)
     elif args.pattern:
         url = BASE_URL + "/patterns/" + args.pattern
 
         params = {
-            'profile': args.profile,
-            'variables': variables,
-            'model': args.model,
-            'options': json.dumps(set_options(args)),
-            'stream': not args.no_stream
+            "profile": args.profile,
+            "variables": variables,
+            "model": args.model,
+            "options": json.dumps(set_options(args)),
+            "stream": not args.no_stream,
         }
-
 
         response = send_query(url, params, data)
         print_response(
-                response,
-                ofile=args.ofile,
-                ccopy=args.copy,
-                stream=not args.no_stream,
-                usage=not args.no_stream and args.usage
+            response,
+            ofile=args.ofile,
+            ccopy=args.copy,
+            stream=not args.no_stream,
+            usage=not args.no_stream and args.usage,
         )
     else:
         # output only
