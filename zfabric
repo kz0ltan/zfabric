@@ -1,46 +1,49 @@
 #!/usr/bin/env python3
 
+""" zFabric client """
+
 import argparse
 import json
 import os
 import select
 import sys
-from typing import List, Dict
-
-import tools.yt
+from typing import List, Dict, Optional
 
 from dotenv import load_dotenv
 import pyperclip
 import requests
+
+import tools.yt
 
 ENV_PATH = "~/.config/zfabric/.env"
 # BASE_URL="http://websrv4.kzoltan.srv:13337"
 BASE_URL = "http://localhost:13337"
 
 
-def read_token(path):
-    full_path = os.path.expanduser(path)
-    with open(full_path, "r") as f:
-        return f.read().rstrip()
-
-
 def validate_key_value(arg):
+    """ Simple test to check if key-value pair is readable """
     if "=" not in arg:
-        raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
+        raise argparse.ArgumentTypeError(
+            f"Argument '{arg}' is not in key=value format")
     return arg
 
 
-def parse_variables(variables):
-    return dict([v.split("=") for v in variables])
+def parse_variables(variables_to_parse):
+    """ Return a dict of variables """
+    return dict([v.split("=") for v in variables_to_parse])
 
 
 def stdin_has_data():
+    """ Test stdin for data
+    """
     if sys.stdin.isatty():  # No data if running interactively
         return False
     return select.select([sys.stdin], [], [], 0)[0] != []
 
 
-def get_yt_data(url):
+def get_yt_data(yt_url):
+    """ Wrapper to external function to get data from YT
+    """
     options = type(
         "",
         (),
@@ -52,14 +55,16 @@ def get_yt_data(url):
             "lang": "en",
         },
     )()
-    return tools.yt.main_function(url, options, return_only=True)
+    return tools.yt.main_function(yt_url, options, return_only=True)
 
 
-def read_input(path=None, yt_url=None):
+def read_input(path: Optional[str] = None, yt_url: Optional[str] = None):
+    """ Read input from file/stdin on other sources """
     input_data = {"input": None}
 
-    if args.ifile:
-        input_data["input"] = open(args.ifile, "r").read()
+    if path:
+        with open(args.ifile, "r", encoding="utf-8") as f:
+            input_data["input"] = f.read()
     elif stdin_has_data():
         input_data["input"] = sys.stdin.read().rstrip()
 
@@ -89,18 +94,20 @@ def file_not_exists(file_path):
     return file_path
 
 
-def set_options(args):
-    options = dict()
-    if args.num_predict is not None:
-        options["num_predict"] = args.num_predict
-    if args.temperature is not None:
-        options["temperature"] = args.temperature
-    if args.topp is not None:
-        options["topp"] = args.topp
-    if args.frequencypenalty is not None:
-        options["frequencypenalty"] = args.frequencypenalty
-    if args.presencepenalty is not None:
-        options["presencepenalty"] = args.presencepenalty
+def set_options(parsed_args):
+    """ Set options in a JSON compatible format
+    """
+    options = {}
+    if parsed_args.num_predict is not None:
+        options["num_predict"] = parsed_args.num_predict
+    if parsed_args.temperature is not None:
+        options["temperature"] = parsed_args.temperature
+    if parsed_args.topp is not None:
+        options["topp"] = parsed_args.topp
+    if parsed_args.frequencypenalty is not None:
+        options["frequencypenalty"] = parsed_args.frequencypenalty
+    if parsed_args.presencepenalty is not None:
+        options["presencepenalty"] = parsed_args.presencepenalty
     return options
 
 
@@ -115,18 +122,18 @@ def send_query(url, params={}, data=None, stream: bool = False):
         )
     else:
         response = requests.get(url, headers=headers, params=params)
+
     return response
 
 
-def print_usage(response_json):
+def print_usage(need_print: bool, response_json: Dict):
     """Print errors from HTTP responses"""
-    if "usage" in response_json:
+    if need_print and "usage" in response_json:
         print()
-        print("Prompt tokens: {}".format(response_json["usage"]["prompt_tokens"]))
+        print(f"Prompt tokens: {response_json['usage']['prompt_tokens']}")
         print(
-            "Completion tokens: {}".format(response_json["usage"]["completion_tokens"])
-        )
-        print("Total tokens: {}".format(response_json["usage"]["total_tokens"]))
+            f"Completion tokens: {response_json['usage']['completion_tokens']}")
+        print(f"Total tokens: {response_json['usage']['total_tokens']}")
 
 
 def print_error(response_json):
@@ -137,50 +144,78 @@ def print_error(response_json):
 
 def print_response(
     response,
-    ofile: str = None,
+    ofile: Optional[str] = None,
     ccopy: bool = False,
     stream: bool = False,
     usage: bool = False,
 ):
+    """ Print (streamind) response to stdout and optionally:
+        1. save to file
+        2. copy to clipboard
+    """
+
+    response_text = ""
     if stream:
-        response_text = ""
         for chunk in response.iter_lines():
             response_json = json.loads(chunk)
             if "response" in response_json:
                 response_text += response_json["response"]
                 print(response_json["response"], end="", flush=True)
-            print_usage(response_json)
+            print_usage(usage, response_json)
             print_error(response_json)
         print("\n", end="", flush=True)
     else:
         response_json = response.json()
         if "response" in response_json:
-            print(response_json["response"])
-        print_usage(response_json)
+            response_text = response_json["response"]
+            print(response_text)
+        print_usage(usage, response_json)
         print_error(response_json)
 
+    write_alternative_outputs(response_text, ccopy=ccopy, ofile=ofile)
+
+
+def write_alternative_outputs(text: str, ccopy: bool = False, ofile: Optional[str] = None):
+    """ Write output using alternative (non-stdout) outputs
+    """
     if ofile is not None:
-        with open(ofile, "w") as f:
-            f.write(response_text)
+        with open(ofile, "w", encoding="utf-8") as f:
+            f.write(text)
 
     if ccopy is not None:
-        pyperclip.copy(response_text)
+        pyperclip.copy(text)
 
 
-def print_list(response_list: List[str], ccopy: bool = False, ofile: str = None):
+def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None):
+    """ Print string to stdout and optionally:
+        1. save to file
+        2. copy to clipboard
+    """
+
+    print(output)
+    write_alternative_outputs(output, ccopy=ccopy, ofile=ofile)
+
+
+def print_list(response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None):
+    """ Print list of strings to stdout and optionally:
+        1. save to file
+        2. copy to clipboard
+    """
+
     for elem in response_list:
         print(elem)
-
-    if ofile is not None:
-        with open(ofile, "w") as f:
-            f.write(response_list)
-
-    if ccopy is not None:
-        pyperclip.copy(response_list)
+    write_alternative_outputs('\n'.join(response_list),
+                              ccopy=ccopy, ofile=ofile)
 
 
 class CustomAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    """ Custom action for ArgParse:
+        1. If the flag was specified without a value, set the default value
+        1. If the flag was not specified at all, set to None
+        1. If the flag was specified with a value, use that value
+    """
+
+    def __call__(self, cparser, namespace, values, option_string=None):
         if self.default is not None and values is None:
             # If the flag was specified without a value, set the default value
             setattr(namespace, self.dest, self.default)
@@ -234,7 +269,7 @@ if __name__ == "__main__":
         "--variable",
         action="append",
         type=validate_key_value,
-        default=list(),
+        default=[],
         help="Input variables to be replaced in patterns",
     )
     parser.add_argument(
@@ -257,29 +292,34 @@ if __name__ == "__main__":
         "--temperature",
         default=None,
         type=float,
-        help="Set temperature for the model. Increasing the temperature will make the model answer more creatively.",
+        help="Set temperature for the model. Increasing the temperature will "
+        "make the model answer more creatively.",
     )
     parser.add_argument(
         "-T",
         "--topp",
         default=None,
         type=float,
-        help="Set top-P value. Output tokens are selected from the most to least probable until the sum of their probabilities equals to top-P.",
+        help="Set top-P value. Output tokens are selected from the most to "
+        "least probable until the sum of their probabilities equals to top-P.",
     )
     parser.add_argument(
         "-F",
         "--frequencypenalty",
         default=None,
         type=float,
-        help="Positive values penalize new tokens based on their existing frequency in the text so far, "
-        "decreasing the model's likelihood to repeat the same line verbatim.",
+        help="Positive values penalize new tokens based on their existing "
+        "frequency in the text so far, decreasing the model's likelihood "
+        "to repeat the same line verbatim.",
     )
     parser.add_argument(
         "-P",
         "--presencepenalty",
         default=None,
         type=float,
-        help="Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.",
+        help="Positive values penalize new tokens based on whether they "
+        "appear in the text so far, increasing the model's likelihood to talk "
+        "about new topics.",
     )
 
     parser.add_argument(
@@ -324,5 +364,4 @@ if __name__ == "__main__":
             usage=not args.no_stream and args.usage,
         )
     else:
-        # output only
-        print(data["input"])
+        print_str(data["input"], ccopy=args.copy, ofile=args.ofile)

@@ -12,13 +12,13 @@ from pathlib import Path
 import re
 from typing import Dict, List, Any, Optional
 
-from helpers import load_file
-
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
 import ollama
 import openai
 import tiktoken
+
+from helpers import load_file
 
 
 class FabricAPIServer:
@@ -39,13 +39,13 @@ class FabricAPIServer:
 
     def check_auth_token(self, token: str):
         """Verify authentication token"""
-        db = self.config["users"]
-        for user in db.keys():
-            if db[user]["api_key"] == token:
+        user_db = self.config["users"]
+        for user in user_db.keys():
+            if user_db[user]["api_key"] == token:
                 return user
         return None
 
-    def auth_required(self, f):
+    def auth_required(self, func):
         """Decorator function to check if the token is valid.
 
         Args:
@@ -55,7 +55,7 @@ class FabricAPIServer:
             The decorated function
         """
 
-        @wraps(f)
+        @wraps(func)
         def decorated_function(*args, **kwargs):
             """Decorated function to handle authentication token and API endpoint.
 
@@ -84,7 +84,7 @@ class FabricAPIServer:
             if user is None:
                 return jsonify({"error": "user not found!"}), 401
 
-            return f(*args, **kwargs)
+            return func(*args, **kwargs)
 
         return decorated_function
 
@@ -96,11 +96,11 @@ class FabricAPIServer:
             return jsonify({"error": "The requested resource was not found."}), 404
 
         @self.app.errorhandler(500)
-        def server_error(e):
+        def server_error(exception):
             """Manually raise an internal server error:
             flask.abort(500)
             """
-            self.app.logger.error("Error occured: %s", e)
+            self.app.logger.error("Error occured: %s", exception)
             return jsonify({"error": "An internal server error occurred."}), 500
 
     def add_routes(self):
@@ -169,12 +169,14 @@ class FabricAPIServer:
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = self.variable_handler.resolve(system_prompt, variables)
+            system_prompt = self.variable_handler.resolve(
+                system_prompt, variables)
             user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
             system_message = {"role": "system", "content": system_prompt}
-            user_message = {"role": "user", "content": user_prompt + "\n" + input_data}
+            user_message = {"role": "user",
+                            "content": user_prompt + "\n" + input_data}
             messages = [system_message, user_message]
 
             try:
@@ -227,7 +229,8 @@ class AnswerGenerator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -235,7 +238,8 @@ class AnswerGenerator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode(
+            "utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -250,10 +254,10 @@ class AnswerGenerator:
 
         if host:
             return ollama.Client(host=host, headers=headers)
-        else:
-            raise ValueError("Ollama URL not defined in config")
 
-    def _getAzureOpenAIClient(self, profile: Dict):
+        raise ValueError("Ollama URL not defined in config")
+
+    def _get_azure_openai_client(self, profile: Dict):
         endpoint = profile.get("azure_endpoint", None)
         api_key = profile.get("api_key", None)
         api_version = profile.get("api_version", "2024-08-01-preview")
@@ -265,10 +269,10 @@ class AnswerGenerator:
             azure_endpoint=endpoint, api_key=api_key, api_version=api_version
         )
 
-    def _getOpenAIClient(self, profile: Dict):
+    def _get_openai_client(self, profile: Dict):
         api_key = profile.get("api_key", None)
         assert api_key is not None, "API key for profile not found in config!"
-        return openai.OpenAI(api_key)
+        return openai.OpenAI(api_key=api_key)
 
     def _get_client(self, profile_name):
         if profile_name in self._clients:
@@ -284,9 +288,10 @@ class AnswerGenerator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._getAzureOpenAIClient(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
-            self._clients[profile_name] = self._getOpenAIClient(profile)
+            self._clients[profile_name] = self._get_openai_client(profile)
         else:
             raise ValueError(f"Uknown profile type: {profile_type}")
 
@@ -338,8 +343,9 @@ class AnswerGenerator:
         model: str,
         messages=List[Dict],
         stream: bool = False,
-        options: Dict[str, Any] = None,
+        options: Optional[Dict[str, Any]] = None,
     ):
+
         client = self._get_client(profile_name)
         response = client.generate(
             model=model,
@@ -365,23 +371,25 @@ class AnswerGenerator:
             "frequency_penalty": "frequency_penalty",
         }
 
-        ignored = list()
-        translated = dict()
-        for k, v in options.items():
-            if k in mapping:
-                translated[mapping[k]] = v
+        ignored = []
+        translated = {}
+        for key, val in options.items():
+            if key in mapping:
+                translated[mapping[key]] = val
             else:
-                ignored.append(k)
+                ignored.append(key)
 
         return translated, ignored
 
     @staticmethod
     def count_tokens(text: str, model: str = "gpt-4o-mini"):
+        """ Count tokens of text """
         encoding = tiktoken.encoding_for_model(model)
         tokens = encoding.encode(text)
         return len(tokens)
 
     def generate(self, profile_name, model, messages, options, stream):
+        """ Main function, generates text based on messages """
         profile_name, profile = self._get_profile(profile_name)
 
         service = profile.get("type", None)
@@ -394,41 +402,48 @@ class AnswerGenerator:
                 raise ValueError("Model unspecified")
 
         self.logger.info(
-            f"profile:{profile_name} // "
-            f"service:{service} // "
-            f"model:{model} // "
-            f"options:{options} // stream:{stream}"
+            "profile:%s // "
+            "service:%s // "
+            "model:%s // "
+            "options:%s // "
+            "stream:%s",
+            profile_name,
+            service,
+            model,
+            options,
+            stream
         )
 
         if service in ("openai", "azure_openai"):
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug(f"Ignored options in the request: {ignored_options}")
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
             else:
                 generate = self._generate_azure_openai
 
-            def response_stream():
+            def response_stream_openai():
                 for chunk in generate(
                     profile_name, model, messages, stream=stream, **translated_options
                 ):
                     if stream:
-                        r = dict()
+                        ret = {}
                         if len(chunk.choices):
                             if chunk.choices[0].delta.content is not None:
-                                r["response"] = chunk.choices[0].delta.content
+                                ret["response"] = chunk.choices[0].delta.content
                             if chunk.choices[0].finish_reason == "stop":
-                                r["last_chunk"] = True
+                                ret["last_chunk"] = True
                         if chunk.usage:
-                            r["usage"] = {
+                            ret["usage"] = {
                                 "prompt_tokens": chunk.usage.prompt_tokens,
                                 "completion_tokens": chunk.usage.completion_tokens,
                                 "total_tokens": chunk.usage.total_tokens,
                             }
-                        yield json.dumps(r) + "\n"
+                        yield json.dumps(ret) + "\n"
                     else:
                         yield json.dumps(
                             {
@@ -442,21 +457,23 @@ class AnswerGenerator:
                             }
                         )
 
-            return Response(response_stream(), content_type="application/json")
-        elif service == "ollama":
+            return Response(response_stream_openai(), content_type="application/json")
 
-            def response_stream():
+        if service == "ollama":
+
+            def response_stream_ollama():
                 for chunk in self._generate_ollama(
                     profile_name, model, messages, stream=stream, options=options
                 ):
                     yield json.dumps({"response": chunk.response}) + "\n"
 
-            return Response(response_stream(), content_type="application/json")
-        else:
-            raise ValueError("Unknown service {}".format(service))
+            return Response(response_stream_ollama(), content_type="application/json")
+
+        raise ValueError(f"Unknown service {service}")
 
 
 def parse_arguments():
+    """ ArgParse argument parsing """
     parser = argparse.ArgumentParser(description="zFabric server application")
 
     parser.add_argument(
