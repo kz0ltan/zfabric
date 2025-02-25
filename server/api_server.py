@@ -17,6 +17,7 @@ from flask.logging import default_handler
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 import ollama
 import openai
+import sqlite3
 import tiktoken
 
 from helpers import load_file
@@ -197,19 +198,38 @@ class SessionHandler:
 
     def __init__(self, conn_string: str):
         self.conn_string = conn_string
-        self.db_connection = self._setup_db_connection(conn_string)
-        # self.lc_msg_history = SQLChatMessageHistory(db_connection_string=db_connection)
+        self._db_connection = None
+
+    @property
+    def db_connection(self):
+        """Lazy setup of db connection"""
+        if self.db_connection:
+            return self.db_connection
+        self._db_connection = self._setup_db_connection(self.conn_string)
+        return self._db_connection
 
     def _setup_db_connection(self, conn_string: str):
-        return False
+        """Set up a persistent connection to DB"""
+        return sqlite3.connect(conn_string)
+
+    def close_db_connection(self):
+        """Close db connection"""
+        self.db_connection.close()
 
     def get_session(self, sess_id: str):
         """Retrieve an existing chat session"""
-        return False
+        return SQLChatMessageHistory(
+            session_id=sess_id, db_connection_string=self.db_connection
+        )
 
-    def add_session(self, sess_id: str):
-        """Store new chat session"""
-        pass
+    def add_message(self, sess_id: str, msg: str, msg_type: str):
+        """Store new message in a session"""
+        if msg_type == "user":
+            self.get_session(sess_id).add_user_message(msg)
+        elif msg_type == "ai":
+            self.get_session(sess_id).add_ai_message(msg)
+        else:
+            raise ValueError(f"Invalid message type: {msg_type}")
 
 
 class VariableHandler:
