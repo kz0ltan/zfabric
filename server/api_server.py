@@ -10,10 +10,11 @@ import logging
 import os
 from pathlib import Path
 import re
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Optional, Iterable, Any
 
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 import ollama
 import openai
 import tiktoken
@@ -169,14 +170,12 @@ class FabricAPIServer:
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = self.variable_handler.resolve(
-                system_prompt, variables)
+            system_prompt = self.variable_handler.resolve(system_prompt, variables)
             user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
             system_message = {"role": "system", "content": system_prompt}
-            user_message = {"role": "user",
-                            "content": user_prompt + "\n" + input_data}
+            user_message = {"role": "user", "content": user_prompt + "\n" + input_data}
             messages = [system_message, user_message]
 
             try:
@@ -187,6 +186,30 @@ class FabricAPIServer:
                 self.app.logger.error("Error occured: %s", e)
                 raise e
                 # return jsonify({"error": "An error occurred while processing the request."}), 500
+
+
+class SessionHandler:
+    """
+    Handles sessions (single query or chat)
+    * Save/update sessions using configured storage mechanism
+    * Works with langchain to store / retrieve sessions
+    """
+
+    def __init__(self, conn_string: str):
+        self.conn_string = conn_string
+        self.db_connection = self._setup_db_connection(conn_string)
+        # self.lc_msg_history = SQLChatMessageHistory(db_connection_string=db_connection)
+
+    def _setup_db_connection(self, conn_string: str):
+        return False
+
+    def get_session(self, sess_id: str):
+        """Retrieve an existing chat session"""
+        return False
+
+    def add_session(self, sess_id: str):
+        """Store new chat session"""
+        pass
 
 
 class VariableHandler:
@@ -229,8 +252,7 @@ class AnswerGenerator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get(
-                "profiles", {}).get("default_profile", None)
+            profile_name = self.config.get("profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -238,8 +260,7 @@ class AnswerGenerator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode(
-            "utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -288,8 +309,7 @@ class AnswerGenerator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(
-                profile)
+            self._clients[profile_name] = self._get_azure_openai_client(profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         else:
@@ -299,9 +319,9 @@ class AnswerGenerator:
 
     def _generate_openai(
         self,
-        profile_name: str,
+        _: str,
         model: str,
-        messages: List[Dict],
+        messages: Iterable[Any],
         stream: bool = False,
         **kwargs,
     ):
@@ -345,7 +365,6 @@ class AnswerGenerator:
         stream: bool = False,
         options: Optional[Dict[str, Any]] = None,
     ):
-
         client = self._get_client(profile_name)
         response = client.generate(
             model=model,
@@ -383,13 +402,13 @@ class AnswerGenerator:
 
     @staticmethod
     def count_tokens(text: str, model: str = "gpt-4o-mini"):
-        """ Count tokens of text """
+        """Count tokens of text"""
         encoding = tiktoken.encoding_for_model(model)
         tokens = encoding.encode(text)
         return len(tokens)
 
     def generate(self, profile_name, model, messages, options, stream):
-        """ Main function, generates text based on messages """
+        """Main function, generates text based on messages"""
         profile_name, profile = self._get_profile(profile_name)
 
         service = profile.get("type", None)
@@ -402,24 +421,19 @@ class AnswerGenerator:
                 raise ValueError("Model unspecified")
 
         self.logger.info(
-            "profile:%s // "
-            "service:%s // "
-            "model:%s // "
-            "options:%s // "
-            "stream:%s",
+            "profile:%s // service:%s // model:%s // options:%s // stream:%s",
             profile_name,
             service,
             model,
             options,
-            stream
+            stream,
         )
 
         if service in ("openai", "azure_openai"):
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -473,7 +487,7 @@ class AnswerGenerator:
 
 
 def parse_arguments():
-    """ ArgParse argument parsing """
+    """ArgParse argument parsing"""
     parser = argparse.ArgumentParser(description="zFabric server application")
 
     parser.add_argument(

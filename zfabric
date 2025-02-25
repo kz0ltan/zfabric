@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" zFabric client """
+"""zFabric client"""
 
 import argparse
 import json
@@ -21,29 +21,26 @@ BASE_URL = "http://localhost:13337"
 
 
 def validate_key_value(arg):
-    """ Simple test to check if key-value pair is readable """
+    """Simple test to check if key-value pair is readable"""
     if "=" not in arg:
-        raise argparse.ArgumentTypeError(
-            f"Argument '{arg}' is not in key=value format")
+        raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
     return arg
 
 
 def parse_variables(variables_to_parse):
-    """ Return a dict of variables """
+    """Return a dict of variables"""
     return dict([v.split("=") for v in variables_to_parse])
 
 
 def stdin_has_data():
-    """ Test stdin for data
-    """
+    """Test stdin for data"""
     if sys.stdin.isatty():  # No data if running interactively
         return False
     return select.select([sys.stdin], [], [], 0)[0] != []
 
 
 def get_yt_data(yt_url):
-    """ Wrapper to external function to get data from YT
-    """
+    """Wrapper to external function to get data from YT"""
     options = type(
         "",
         (),
@@ -59,18 +56,18 @@ def get_yt_data(yt_url):
 
 
 def read_input(path: Optional[str] = None, yt_url: Optional[str] = None):
-    """ Read input from file/stdin on other sources """
-    input_data = {"input": None}
+    """Read input from file/stdin on other sources"""
+    input_data = {"input": ""}
 
     if path:
-        with open(args.ifile, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             input_data["input"] = f.read()
     elif stdin_has_data():
         input_data["input"] = sys.stdin.read().rstrip()
 
     if yt_url:
         yt_data = get_yt_data(yt_url)
-        if input_data["input"] is None:
+        if input_data["input"] == "":
             input_data["input"] = json.dumps(yt_data)
         else:
             input_data["yt_input"] = json.dumps(yt_data)
@@ -95,8 +92,7 @@ def file_not_exists(file_path):
 
 
 def set_options(parsed_args):
-    """ Set options in a JSON compatible format
-    """
+    """Set options in a JSON compatible format"""
     options = {}
     if parsed_args.num_predict is not None:
         options["num_predict"] = parsed_args.num_predict
@@ -111,19 +107,32 @@ def set_options(parsed_args):
     return options
 
 
-def send_query(url, params={}, data=None, stream: bool = False):
+def send_query(
+    generation_url: str, params: Optional[Dict] = None, post_data: Optional[Dict] = None
+):
+    """Send query to generation endpoint"""
+    if params is None:
+        params = {}
+
     headers = {
-        "Authorization": "bearer " + os.getenv("ZF_SERVER_TOKEN"),
+        "Authorization": "bearer " + str(os.getenv("ZF_SERVER_TOKEN")),
         "Content-Type": "Application/json",
     }
-    if data is not None:
-        response = requests.post(
-            url, headers=headers, json=data, stream=params["stream"], params=params
+    if post_data is not None:
+        query_response = requests.post(
+            generation_url,
+            headers=headers,
+            json=post_data,
+            stream=params["stream"],
+            params=params,
+            timeout=10,
         )
     else:
-        response = requests.get(url, headers=headers, params=params)
+        query_response = requests.get(
+            generation_url, headers=headers, params=params, timeout=10
+        )
 
-    return response
+    return query_response
 
 
 def print_usage(need_print: bool, response_json: Dict):
@@ -131,8 +140,7 @@ def print_usage(need_print: bool, response_json: Dict):
     if need_print and "usage" in response_json:
         print()
         print(f"Prompt tokens: {response_json['usage']['prompt_tokens']}")
-        print(
-            f"Completion tokens: {response_json['usage']['completion_tokens']}")
+        print(f"Completion tokens: {response_json['usage']['completion_tokens']}")
         print(f"Total tokens: {response_json['usage']['total_tokens']}")
 
 
@@ -149,9 +157,9 @@ def print_response(
     stream: bool = False,
     usage: bool = False,
 ):
-    """ Print (streamind) response to stdout and optionally:
-        1. save to file
-        2. copy to clipboard
+    """Print (streamind) response to stdout and optionally:
+    1. save to file
+    2. copy to clipboard
     """
 
     response_text = ""
@@ -175,9 +183,10 @@ def print_response(
     write_alternative_outputs(response_text, ccopy=ccopy, ofile=ofile)
 
 
-def write_alternative_outputs(text: str, ccopy: bool = False, ofile: Optional[str] = None):
-    """ Write output using alternative (non-stdout) outputs
-    """
+def write_alternative_outputs(
+    text: str, ccopy: bool = False, ofile: Optional[str] = None
+):
+    """Write output using alternative (non-stdout) outputs"""
     if ofile is not None:
         with open(ofile, "w", encoding="utf-8") as f:
             f.write(text)
@@ -187,32 +196,33 @@ def write_alternative_outputs(text: str, ccopy: bool = False, ofile: Optional[st
 
 
 def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None):
-    """ Print string to stdout and optionally:
-        1. save to file
-        2. copy to clipboard
+    """Print string to stdout and optionally:
+    1. save to file
+    2. copy to clipboard
     """
 
     print(output)
     write_alternative_outputs(output, ccopy=ccopy, ofile=ofile)
 
 
-def print_list(response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None):
-    """ Print list of strings to stdout and optionally:
-        1. save to file
-        2. copy to clipboard
+def print_list(
+    response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None
+):
+    """Print list of strings to stdout and optionally:
+    1. save to file
+    2. copy to clipboard
     """
 
     for elem in response_list:
         print(elem)
-    write_alternative_outputs('\n'.join(response_list),
-                              ccopy=ccopy, ofile=ofile)
+    write_alternative_outputs("\n".join(response_list), ccopy=ccopy, ofile=ofile)
 
 
 class CustomAction(argparse.Action):
-    """ Custom action for ArgParse:
-        1. If the flag was specified without a value, set the default value
-        1. If the flag was not specified at all, set to None
-        1. If the flag was specified with a value, use that value
+    """Custom action for ArgParse:
+    1. If the flag was specified without a value, set the default value
+    1. If the flag was not specified at all, set to None
+    1. If the flag was specified with a value, use that value
     """
 
     def __call__(self, cparser, namespace, values, option_string=None):
@@ -340,14 +350,14 @@ if __name__ == "__main__":
     data = read_input(args.ifile, args.youtube)
 
     if args.list:
-        response = send_query(BASE_URL + "/" + args.list).json()
-        print_error(response)
-        if "response" in response:
-            print_list(response["response"], ccopy=args.copy, ofile=args.ofile)
+        resp = send_query(BASE_URL + "/" + args.list).json()
+        print_error(resp)
+        if "response" in resp:
+            print_list(resp["response"], ccopy=args.copy, ofile=args.ofile)
     elif args.pattern:
         url = BASE_URL + "/patterns/" + args.pattern
 
-        params = {
+        query_params = {
             "profile": args.profile,
             "variables": variables,
             "model": args.model,
@@ -355,9 +365,9 @@ if __name__ == "__main__":
             "stream": not args.no_stream,
         }
 
-        response = send_query(url, params, data)
+        resp = send_query(url, query_params, data)
         print_response(
-            response,
+            resp,
             ofile=args.ofile,
             ccopy=args.copy,
             stream=not args.no_stream,
