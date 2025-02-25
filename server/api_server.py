@@ -10,14 +10,15 @@ import logging
 import os
 from pathlib import Path
 import re
+import sqlite3
 from typing import Dict, List, Optional, Iterable, Any
 
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
+from langchain_core.messages.chat import ChatMessage
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 import ollama
 import openai
-import sqlite3
 import tiktoken
 
 from helpers import load_file
@@ -36,8 +37,10 @@ class FabricAPIServer:
         self.add_routes()
         self.add_errorhandlers()
 
-        self.generator = AnswerGenerator(self.config)
         self.variable_handler = VariableHandler(self.config)
+        self.session_handler = SessionHandler(self.config)
+        self.generator = AnswerGenerator(
+            self.config, shandler=self.session_handler)
 
     def check_auth_token(self, token: str):
         """Verify authentication token"""
@@ -171,12 +174,18 @@ class FabricAPIServer:
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = self.variable_handler.resolve(system_prompt, variables)
+            system_prompt = self.variable_handler.resolve(
+                system_prompt, variables)
             user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
-            system_message = {"role": "system", "content": system_prompt}
-            user_message = {"role": "user", "content": user_prompt + "\n" + input_data}
+            # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
+            system_message = ChatMessage(content=system_prompt, role="system")
+            # system_message = {"role": "system", "content": system_prompt}
+            user_message = ChatMessage(
+                content=user_prompt + "\n" + input_data, role="system")
+            # user_message = {"role": "user",
+            #                "content": user_prompt + "\n" + input_data}
             messages = [system_message, user_message]
 
             try:
@@ -196,16 +205,24 @@ class SessionHandler:
     * Works with langchain to store / retrieve sessions
     """
 
-    def __init__(self, conn_string: str):
-        self.conn_string = conn_string
+    def __init__(self, config: Dict[Any, Any]):
+        self.db_path = os.path.expanduser(config.get("sqlite3_db_path", None))
         self._db_connection = None
 
-    @property
+        self.logger = logging.getLogger("app.variables")
+        self.logger.addHandler(default_handler)
+        self.logger.setLevel(logging.INFO)
+
+    @ property
     def db_connection(self):
         """Lazy setup of db connection"""
         if self.db_connection:
             return self.db_connection
-        self._db_connection = self._setup_db_connection(self.conn_string)
+        if self.db_path is None:
+            self.logger.warning(
+                "No 'sqlite3_db_path' was found in config, using volatile, memory storage!")
+            self.db_path = ":memory:"
+        self._db_connection = self._setup_db_connection(self.db_path)
         return self._db_connection
 
     def _setup_db_connection(self, conn_string: str):
@@ -219,17 +236,13 @@ class SessionHandler:
     def get_session(self, sess_id: str):
         """Retrieve an existing chat session"""
         return SQLChatMessageHistory(
-            session_id=sess_id, db_connection_string=self.db_connection
+            session_id=sess_id, connection=self.db_connection
         )
 
-    def add_message(self, sess_id: str, msg: str, msg_type: str):
-        """Store new message in a session"""
-        if msg_type == "user":
-            self.get_session(sess_id).add_user_message(msg)
-        elif msg_type == "ai":
-            self.get_session(sess_id).add_ai_message(msg)
-        else:
-            raise ValueError(f"Invalid message type: {msg_type}")
+    def add_messages(self, sess_id: str, messages: List[str]):
+        """Store new messages in a session"""
+
+        self.get_session(sess_id).add_ai_message(messages)
 
 
 class VariableHandler:
@@ -255,14 +268,15 @@ class VariableHandler:
 class AnswerGenerator:
     """Handle API connections and text generations using LLM providers"""
 
-    def __init__(self, config):
+    def __init__(self, config, shandler: Optional[SessionHandler] = None):
         self.config = config
+        self.session_handler = shandler
 
         self.logger = logging.getLogger("app.generator")
         self.logger.addHandler(default_handler)
         self.logger.setLevel(logging.INFO)
 
-        self._clients = {}
+        self._clients: Dict[str, Any] = {}
 
     def _load_profile(self, profile_name):
         profile = self.config.get("profiles", {}).get(profile_name, None)
@@ -272,15 +286,17 @@ class AnswerGenerator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
         return profile_name, self._load_profile(profile_name)
 
-    @staticmethod
+    @ staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode(
+            "utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -329,7 +345,8 @@ class AnswerGenerator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         else:
@@ -420,15 +437,26 @@ class AnswerGenerator:
 
         return translated, ignored
 
-    @staticmethod
+    @ staticmethod
     def count_tokens(text: str, model: str = "gpt-4o-mini"):
         """Count tokens of text"""
         encoding = tiktoken.encoding_for_model(model)
         tokens = encoding.encode(text)
         return len(tokens)
 
-    def generate(self, profile_name, model, messages, options, stream):
+    @staticmethod
+    def _chatmessages_to_json(messages: List[ChatMessage]):
+        """ Convert langchain message format to JSON compatible with APIs
+            This is needed, because of the non-langchain implementation of generate()
+        """
+        return json.dumps([
+            {"role": msg.type, "content": msg.content} for msg in messages
+        ])
+
+    def generate(self, profile_name: str, model: str, messages: List[ChatMessage],
+                 options: Dict[str, Any], stream: bool):
         """Main function, generates text based on messages"""
+        api_messages = self._chatmessages_to_json(messages)
         profile_name, profile = self._get_profile(profile_name)
 
         service = profile.get("type", None)
@@ -453,7 +481,8 @@ class AnswerGenerator:
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -462,7 +491,7 @@ class AnswerGenerator:
 
             def response_stream_openai():
                 for chunk in generate(
-                    profile_name, model, messages, stream=stream, **translated_options
+                    profile_name, model, api_messages, stream=stream, **translated_options
                 ):
                     if stream:
                         ret = {}
@@ -491,16 +520,18 @@ class AnswerGenerator:
                             }
                         )
 
+            # TODO: add messages to SessionHandler?
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "ollama":
 
             def response_stream_ollama():
                 for chunk in self._generate_ollama(
-                    profile_name, model, messages, stream=stream, options=options
+                    profile_name, model, api_messages, stream=stream, options=options
                 ):
                     yield json.dumps({"response": chunk.response}) + "\n"
 
+            # TODO: add messages to SessionHandler?
             return Response(response_stream_ollama(), content_type="application/json")
 
         raise ValueError(f"Unknown service {service}")
