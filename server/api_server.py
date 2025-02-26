@@ -10,15 +10,16 @@ import logging
 import os
 from pathlib import Path
 import re
-import sqlite3
 from typing import Dict, List, Optional, Iterable, Any
 
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
-from langchain_core.messages.chat import ChatMessage
+from langchain_core.messages.chat import ChatMessage, ChatMessageChunk
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 import ollama
 import openai
+from sqlalchemy import create_engine, select, distinct, MetaData
+from sqlalchemy.orm import Session
 import tiktoken
 
 from helpers import load_file
@@ -38,9 +39,8 @@ class FabricAPIServer:
         self.add_errorhandlers()
 
         self.variable_handler = VariableHandler(self.config)
-        self.session_handler = SessionHandler(self.config)
-        self.generator = AnswerGenerator(
-            self.config, shandler=self.session_handler)
+        self.session_manager = SessionManager(self.config)
+        self.generator = AnswerGenerator(self.config, smanager=self.session_manager)
 
     def check_auth_token(self, token: str):
         """Verify authentication token"""
@@ -133,6 +133,11 @@ class FabricAPIServer:
             )
             return jsonify({"response": list(patterns)})
 
+        @self.app.route("/sessions", methods=["GET"])
+        @self.auth_required
+        def list_session():
+            return jsonify({"response": self.session_manager.get_session_names()})
+
         @self.app.route("/patterns/<pattern>", methods=["POST"])
         @self.auth_required
         def milling(pattern):
@@ -174,8 +179,7 @@ class FabricAPIServer:
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = self.variable_handler.resolve(
-                system_prompt, variables)
+            system_prompt = self.variable_handler.resolve(system_prompt, variables)
             user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
@@ -183,7 +187,8 @@ class FabricAPIServer:
             system_message = ChatMessage(content=system_prompt, role="system")
             # system_message = {"role": "system", "content": system_prompt}
             user_message = ChatMessage(
-                content=user_prompt + "\n" + input_data, role="system")
+                content=user_prompt + "\n" + input_data, role="system"
+            )
             # user_message = {"role": "user",
             #                "content": user_prompt + "\n" + input_data}
             messages = [system_message, user_message]
@@ -198,51 +203,87 @@ class FabricAPIServer:
                 # return jsonify({"error": "An error occurred while processing the request."}), 500
 
 
-class SessionHandler:
+class SessionManager:
     """
     Handles sessions (single query or chat)
     * Save/update sessions using configured storage mechanism
     * Works with langchain to store / retrieve sessions
     """
 
-    def __init__(self, config: Dict[Any, Any]):
-        self.db_path = os.path.expanduser(config.get("sqlite3_db_path", None))
+    def __init__(self, config: Dict[Any, Any], session_id_field_name: str = ""):
+        self.db_path = config.get("sqlite3_db_path", "")
+        self.table_name = config.get("sqlite3_table_name", "message_store")
+        self.session_id_field_name = config.get(
+            "sqlite3_session_id_field_name", "session_id"
+        )
         self._db_connection = None
+        self.metadata = None
+        self.table = None
 
         self.logger = logging.getLogger("app.variables")
         self.logger.addHandler(default_handler)
         self.logger.setLevel(logging.INFO)
 
-    @ property
+    @property
     def db_connection(self):
         """Lazy setup of db connection"""
-        if self.db_connection:
-            return self.db_connection
-        if self.db_path is None:
+        if self._db_connection:
+            return self._db_connection
+        if len(self.db_path) == 0:
             self.logger.warning(
-                "No 'sqlite3_db_path' was found in config, using volatile, memory storage!")
-            self.db_path = ":memory:"
-        self._db_connection = self._setup_db_connection(self.db_path)
+                "No 'sqlite3_db_path' was found in config, using volatile, memory storage!"
+            )
+        else:
+            self.db_path = os.path.expanduser(self.db_path)
+        self._db_connection = self._setup_db_connection("sqlite://" + self.db_path)
         return self._db_connection
 
     def _setup_db_connection(self, conn_string: str):
         """Set up a persistent connection to DB"""
-        return sqlite3.connect(conn_string)
+        return create_engine(conn_string)
 
     def close_db_connection(self):
-        """Close db connection"""
-        self.db_connection.close()
+        """Close DB connection"""
+        self.db_connection.dispose()
+
+    def _setup_direct_access(self):
+        if self.metadata is None:
+            self.metadata = MetaData()
+            self.metadata.reflect(bind=self.db_connection)
+        if self.table is None:
+            self.table = self.metadata.tables.get(self.table_name)
+            if self.table is None:
+                raise ValueError(f"Table '{self.table_name}' not found in db")
 
     def get_session(self, sess_id: str):
         """Retrieve an existing chat session"""
+        if sess_id is None:
+            return None
         return SQLChatMessageHistory(
-            session_id=sess_id, connection=self.db_connection
+            session_id=sess_id,
+            connection=self.db_connection,
+            table_name=self.table_name,
+            session_id_field_name=self.session_id_field_name,
         )
 
     def add_messages(self, sess_id: str, messages: List[str]):
         """Store new messages in a session"""
+        self.get_session(sess_id).add_messages(messages)
 
-        self.get_session(sess_id).add_ai_message(messages)
+    def get_session_names(self) -> List:
+        """Retrieves a unique list of session names from the DB"""
+        try:
+            self._setup_direct_access()
+        except ValueError:
+            return []
+
+        with Session(self.db_connection) as session:
+            stmt = select(distinct(self.table.c[self.session_id_field_name]))
+            result = session.execute(stmt)
+
+            session_ids = [row[0] for row in result]
+
+        return session_ids
 
 
 class VariableHandler:
@@ -268,9 +309,9 @@ class VariableHandler:
 class AnswerGenerator:
     """Handle API connections and text generations using LLM providers"""
 
-    def __init__(self, config, shandler: Optional[SessionHandler] = None):
+    def __init__(self, config, smanager: Optional[SessionManager] = None):
         self.config = config
-        self.session_handler = shandler
+        self.session_manager = smanager
 
         self.logger = logging.getLogger("app.generator")
         self.logger.addHandler(default_handler)
@@ -286,17 +327,15 @@ class AnswerGenerator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get(
-                "profiles", {}).get("default_profile", None)
+            profile_name = self.config.get("profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
         return profile_name, self._load_profile(profile_name)
 
-    @ staticmethod
+    @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode(
-            "utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -345,8 +384,7 @@ class AnswerGenerator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(
-                profile)
+            self._clients[profile_name] = self._get_azure_openai_client(profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         else:
@@ -437,7 +475,7 @@ class AnswerGenerator:
 
         return translated, ignored
 
-    @ staticmethod
+    @staticmethod
     def count_tokens(text: str, model: str = "gpt-4o-mini"):
         """Count tokens of text"""
         encoding = tiktoken.encoding_for_model(model)
@@ -446,15 +484,20 @@ class AnswerGenerator:
 
     @staticmethod
     def _chatmessages_to_json(messages: List[ChatMessage]):
-        """ Convert langchain message format to JSON compatible with APIs
-            This is needed, because of the non-langchain implementation of generate()
+        """Convert langchain message format to JSON compatible with APIs
+        This is needed, because of the non-langchain implementation of generate()
         """
-        return json.dumps([
-            {"role": msg.type, "content": msg.content} for msg in messages
-        ])
+        return [{"role": msg.type, "content": msg.content} for msg in messages]
 
-    def generate(self, profile_name: str, model: str, messages: List[ChatMessage],
-                 options: Dict[str, Any], stream: bool):
+    def generate(
+        self,
+        profile_name: str,
+        model: str,
+        messages: List[ChatMessage],
+        options: Dict[str, Any],
+        stream: bool,
+        sess_id: Optional[str] = None,
+    ):
         """Main function, generates text based on messages"""
         api_messages = self._chatmessages_to_json(messages)
         profile_name, profile = self._get_profile(profile_name)
@@ -481,8 +524,7 @@ class AnswerGenerator:
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -491,7 +533,11 @@ class AnswerGenerator:
 
             def response_stream_openai():
                 for chunk in generate(
-                    profile_name, model, api_messages, stream=stream, **translated_options
+                    profile_name,
+                    model,
+                    api_messages,
+                    stream=stream,
+                    **translated_options,
                 ):
                     if stream:
                         ret = {}
@@ -520,18 +566,20 @@ class AnswerGenerator:
                             }
                         )
 
-            # TODO: add messages to SessionHandler?
+            # TODO: add messages to SessionManager?
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "ollama":
 
             def response_stream_ollama():
+                messages = []
                 for chunk in self._generate_ollama(
                     profile_name, model, api_messages, stream=stream, options=options
                 ):
+                    messages.append(ChatMessageChunk(content=chunk.response, role="ai"))
                     yield json.dumps({"response": chunk.response}) + "\n"
+                self.session_manager.add_messages(str(sess_id), messages)
 
-            # TODO: add messages to SessionHandler?
             return Response(response_stream_ollama(), content_type="application/json")
 
         raise ValueError(f"Unknown service {service}")

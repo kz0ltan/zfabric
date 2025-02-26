@@ -246,9 +246,9 @@ if __name__ == "__main__":
         type=str,
         action=CustomAction,
         nargs="?",
-        choices=["profiles", "patterns"],
+        choices=["profiles", "patterns", "sessions"],
         const="patterns",
-        help="List patterns/profiles",
+        help="List patterns/profiles/sessions",
     )
     group.add_argument("-p", "--pattern", default=None, help="Pattern to use")
 
