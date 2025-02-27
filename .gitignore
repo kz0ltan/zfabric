@@ -1,4 +1,5 @@
 server/config.json
+server/zfabric.sqlite3
 server/local/**
 **/__pycache__
 logs/*

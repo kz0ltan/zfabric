@@ -55,8 +55,17 @@ def get_yt_data(yt_url):
     return tools.yt.main_function(yt_url, options, return_only=True)
 
 
-def read_input(path: Optional[str] = None, yt_url: Optional[str] = None):
-    """Read input from file/stdin on other sources"""
+def get_web_data(web_url: str):
+    """Wrapper to external function that scrapes a URL and returns text"""
+    return ""
+
+
+def read_input(
+    path: Optional[str] = None,
+    yt_url: Optional[str] = None,
+    web_url: Optional[str] = None,
+) -> Dict[str, str]:
+    """Read input from file/stdin or other sources"""
     input_data = {"input": ""}
 
     if path:
@@ -67,10 +76,11 @@ def read_input(path: Optional[str] = None, yt_url: Optional[str] = None):
 
     if yt_url:
         yt_data = get_yt_data(yt_url)
-        if input_data["input"] == "":
-            input_data["input"] = json.dumps(yt_data)
-        else:
-            input_data["yt_input"] = json.dumps(yt_data)
+        input_data["yt_input"] = json.dumps(yt_data)
+
+    if web_url:
+        web_data = get_web_data(web_url)
+        input_data["web_input"] = json.dumps(web_data)
 
     return input_data
 
@@ -275,6 +285,13 @@ if __name__ == "__main__":
         help="YT URL to download transcript and use it as {{input}} or {{yt_input}}",
     )
     parser.add_argument(
+        "-u",
+        "--url",
+        type=str,
+        default=None,
+        help="Input URL to be scraped for text input",
+    )
+    parser.add_argument(
         "-v",
         "--variable",
         action="append",
@@ -283,7 +300,6 @@ if __name__ == "__main__":
         help="Input variables to be replaced in patterns",
     )
     parser.add_argument(
-        "-u",
         "--usage",
         type=bool,
         default=False,
@@ -331,6 +347,9 @@ if __name__ == "__main__":
         "appear in the text so far, increasing the model's likelihood to talk "
         "about new topics.",
     )
+    parser.add_argument(
+        "-s", "--session", default=None, type=str, help="Session name to insert/query"
+    )
 
     parser.add_argument(
         "-r", "--profile", help="Profile to use (defined in server config.json)"
@@ -347,7 +366,8 @@ if __name__ == "__main__":
     variables = parse_variables(args.variable)
     load_dotenv(os.path.expanduser(ENV_PATH))
 
-    data = read_input(args.ifile, args.youtube)
+    data = read_input(args.ifile, args.youtube, args.url)
+    # TODO: data has multiple keys in it!
 
     if args.list:
         resp = send_query(BASE_URL + "/" + args.list).json()
@@ -363,6 +383,7 @@ if __name__ == "__main__":
             "model": args.model,
             "options": json.dumps(set_options(args)),
             "stream": not args.no_stream,
+            "session": args.session,
         }
 
         resp = send_query(url, query_params, data)
@@ -372,6 +393,19 @@ if __name__ == "__main__":
             ccopy=args.copy,
             stream=not args.no_stream,
             usage=not args.no_stream and args.usage,
+        )
+    elif args.session:
+        url = BASE_URL + "/session/" + args.session
+
+        query_params = {
+            "stream": not args.no_stream,
+            "session": args.session,
+        }
+        resp = send_query(url, query_params)
+        print_response(
+            resp,
+            ofile=args.ofile,
+            ccopy=args.copy,
         )
     else:
         print_str(data["input"], ccopy=args.copy, ofile=args.ofile)

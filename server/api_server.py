@@ -15,14 +15,17 @@ from typing import Dict, List, Optional, Iterable, Any
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
 from langchain_core.messages.chat import ChatMessage, ChatMessageChunk
+from langchain_core.messages.utils import merge_message_runs
+from langchain_core.messages import message_to_dict
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 import ollama
 import openai
 from sqlalchemy import create_engine, select, distinct, MetaData
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
 import tiktoken
 
-from helpers import load_file
+from helpers import load_file, generate_random_number
 
 
 class FabricAPIServer:
@@ -138,9 +141,21 @@ class FabricAPIServer:
         def list_session():
             return jsonify({"response": self.session_manager.get_session_names()})
 
+        @self.app.route("/session/<session>", methods=["GET"])
+        @self.auth_required
+        def get_session(session: str):
+            return jsonify(
+                {
+                    "response": [
+                        message_to_dict(msg)
+                        for msg in self.session_manager.get_session(session).messages
+                    ]
+                }
+            )
+
         @self.app.route("/patterns/<pattern>", methods=["POST"])
         @self.auth_required
-        def milling(pattern):
+        def milling(pattern: str):
             """Combine fabric pattern with input from user and send to OpenAI's GPT-4 model.
 
             Returns:
@@ -157,6 +172,10 @@ class FabricAPIServer:
                 "stream",
                 default=False,
                 type=(lambda s: s.lower() in ("True", "true", "1")),
+            )
+            session = request.args.get(
+                "session",
+                default=generate_random_number(10),
             )
             variables = request.args.get("variables", default={})
 
@@ -185,17 +204,14 @@ class FabricAPIServer:
             # Build the API call
             # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
             system_message = ChatMessage(content=system_prompt, role="system")
-            # system_message = {"role": "system", "content": system_prompt}
             user_message = ChatMessage(
                 content=user_prompt + "\n" + input_data, role="system"
             )
-            # user_message = {"role": "user",
-            #                "content": user_prompt + "\n" + input_data}
             messages = [system_message, user_message]
 
             try:
                 return self.generator.generate(
-                    profile_name, model, messages, options, stream
+                    profile_name, model, messages, options, stream, session
                 )
             except Exception as e:
                 self.app.logger.error("Error occured: %s", e)
@@ -211,7 +227,7 @@ class SessionManager:
     """
 
     def __init__(self, config: Dict[Any, Any], session_id_field_name: str = ""):
-        self.db_path = config.get("sqlite3_db_path", "")
+        self.db_path = config.get("sqlite3_db_path", "/zfabric.sqlite3")
         self.table_name = config.get("sqlite3_table_name", "message_store")
         self.session_id_field_name = config.get(
             "sqlite3_session_id_field_name", "session_id"
@@ -250,7 +266,6 @@ class SessionManager:
         if self.metadata is None:
             self.metadata = MetaData()
             self.metadata.reflect(bind=self.db_connection)
-        if self.table is None:
             self.table = self.metadata.tables.get(self.table_name)
             if self.table is None:
                 raise ValueError(f"Table '{self.table_name}' not found in db")
@@ -268,17 +283,21 @@ class SessionManager:
 
     def add_messages(self, sess_id: str, messages: List[str]):
         """Store new messages in a session"""
+        if sess_id is None:
+            return
+        messages = merge_message_runs(messages, chunk_separator="")
         self.get_session(sess_id).add_messages(messages)
 
     def get_session_names(self) -> List:
         """Retrieves a unique list of session names from the DB"""
         try:
             self._setup_direct_access()
-        except ValueError:
+        except ValueError as e:
+            self.logger.info(str(e))
             return []
 
         with Session(self.db_connection) as session:
-            stmt = select(distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -496,7 +515,7 @@ class AnswerGenerator:
         messages: List[ChatMessage],
         options: Dict[str, Any],
         stream: bool,
-        sess_id: Optional[str] = None,
+        session: Optional[str] = None,
     ):
         """Main function, generates text based on messages"""
         api_messages = self._chatmessages_to_json(messages)
@@ -539,11 +558,16 @@ class AnswerGenerator:
                     stream=stream,
                     **translated_options,
                 ):
+                    messages = []
                     if stream:
                         ret = {}
                         if len(chunk.choices):
                             if chunk.choices[0].delta.content is not None:
-                                ret["response"] = chunk.choices[0].delta.content
+                                txt = chunk.choices[0].delta.content
+                                ret["response"] = txt
+                                messages.append(
+                                    ChatMessageChunk(content=txt, role="ai")
+                                )
                             if chunk.choices[0].finish_reason == "stop":
                                 ret["last_chunk"] = True
                         if chunk.usage:
@@ -554,9 +578,11 @@ class AnswerGenerator:
                             }
                         yield json.dumps(ret) + "\n"
                     else:
+                        txt = chunk.choices[0].message.content
+                        messages.append(ChatMessage(content=txt, role="ai"))
                         yield json.dumps(
                             {
-                                "response": chunk.choices[0].message.content,
+                                "response": txt,
                                 "usage": {
                                     "prompt_tokens": chunk.usage.prompt_tokens,
                                     "completion_tokens": chunk.usage.completion_tokens,
@@ -565,8 +591,8 @@ class AnswerGenerator:
                                 "ignored_options": ",".join(ignored_options),
                             }
                         )
+                self.session_manager.add_messages(session, messages)
 
-            # TODO: add messages to SessionManager?
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "ollama":
@@ -578,7 +604,7 @@ class AnswerGenerator:
                 ):
                     messages.append(ChatMessageChunk(content=chunk.response, role="ai"))
                     yield json.dumps({"response": chunk.response}) + "\n"
-                self.session_manager.add_messages(str(sess_id), messages)
+                self.session_manager.add_messages(session, messages)
 
             return Response(response_stream_ollama(), content_type="application/json")
 
