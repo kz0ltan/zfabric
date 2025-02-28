@@ -3,6 +3,7 @@
 
 import argparse
 from base64 import b64encode
+import datetime
 from functools import wraps
 import json
 import itertools
@@ -26,6 +27,7 @@ from sqlalchemy.sql import Select
 import tiktoken
 
 from helpers import load_file, generate_random_number
+from lib.lc import ExMessageConverter
 
 
 class FabricAPIServer:
@@ -43,7 +45,8 @@ class FabricAPIServer:
 
         self.variable_handler = VariableHandler(self.config)
         self.session_manager = SessionManager(self.config)
-        self.generator = AnswerGenerator(self.config, smanager=self.session_manager)
+        self.generator = AnswerGenerator(
+            self.config, smanager=self.session_manager)
 
     def check_auth_token(self, token: str):
         """Verify authentication token"""
@@ -198,14 +201,21 @@ class FabricAPIServer:
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = self.variable_handler.resolve(system_prompt, variables)
+            system_prompt = self.variable_handler.resolve(
+                system_prompt, variables)
             user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
             # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
-            system_message = ChatMessage(content=system_prompt, role="system")
+            timestamp = datetime.datetime.now().timestamp()
+            system_message = ChatMessage(
+                content=system_prompt,
+                role="system",
+                response_metadata={"timestamp": timestamp}
+            )
             user_message = ChatMessage(
-                content=user_prompt + "\n" + input_data, role="system"
+                content=user_prompt + "\n" + input_data, role="user",
+                response_metadata={"timestamp": timestamp}
             )
             messages = [system_message, user_message]
 
@@ -227,7 +237,8 @@ class SessionManager:
     """
 
     def __init__(self, config: Dict[Any, Any], session_id_field_name: str = ""):
-        self.db_path = config.get("sqlite3_db_path", "/zfabric.sqlite3")
+        self.db_path = config.get(
+            "sqlite3_conn_string", "~/.local/share/zfabric/sessions.sqlite3")
         self.table_name = config.get("sqlite3_table_name", "message_store")
         self.session_id_field_name = config.get(
             "sqlite3_session_id_field_name", "session_id"
@@ -247,11 +258,11 @@ class SessionManager:
             return self._db_connection
         if len(self.db_path) == 0:
             self.logger.warning(
-                "No 'sqlite3_db_path' was found in config, using volatile, memory storage!"
+                "No 'sqlite3_conn_string' was found in config, using volatile, memory storage!"
             )
         else:
-            self.db_path = os.path.expanduser(self.db_path)
-        self._db_connection = self._setup_db_connection("sqlite://" + self.db_path)
+            self.db_path = "sqlite:///" + os.path.expanduser(self.db_path)
+        self._db_connection = self._setup_db_connection(self.db_path)
         return self._db_connection
 
     def _setup_db_connection(self, conn_string: str):
@@ -279,6 +290,7 @@ class SessionManager:
             connection=self.db_connection,
             table_name=self.table_name,
             session_id_field_name=self.session_id_field_name,
+            custom_message_converter=ExMessageConverter(self.table_name)
         )
 
     def add_messages(self, sess_id: str, messages: List[str]):
@@ -297,7 +309,8 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(
+                distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -346,7 +359,8 @@ class AnswerGenerator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -354,7 +368,8 @@ class AnswerGenerator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode(
+            "utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -403,7 +418,8 @@ class AnswerGenerator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         else:
@@ -539,11 +555,14 @@ class AnswerGenerator:
             stream,
         )
 
+        timestamp = datetime.datetime.now().timestamp()
+
         if service in ("openai", "azure_openai"):
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -566,7 +585,12 @@ class AnswerGenerator:
                                 txt = chunk.choices[0].delta.content
                                 ret["response"] = txt
                                 messages.append(
-                                    ChatMessageChunk(content=txt, role="ai")
+                                    ChatMessageChunk(
+                                        content=txt,
+                                        role="ai",
+                                        response_metadata={
+                                            "timestamp": timestamp},
+                                    )
                                 )
                             if chunk.choices[0].finish_reason == "stop":
                                 ret["last_chunk"] = True
@@ -579,7 +603,13 @@ class AnswerGenerator:
                         yield json.dumps(ret) + "\n"
                     else:
                         txt = chunk.choices[0].message.content
-                        messages.append(ChatMessage(content=txt, role="ai"))
+                        messages.append(
+                            ChatMessage(
+                                content=txt,
+                                role="ai",
+                                response_metadata={"timestamp": timestamp},
+                            )
+                        )
                         yield json.dumps(
                             {
                                 "response": txt,
@@ -602,7 +632,11 @@ class AnswerGenerator:
                 for chunk in self._generate_ollama(
                     profile_name, model, api_messages, stream=stream, options=options
                 ):
-                    messages.append(ChatMessageChunk(content=chunk.response, role="ai"))
+                    messages.append(ChatMessageChunk(
+                        content=chunk.response,
+                        role="ai",
+                        response_metadata={"timestamp": timestamp},
+                    ))
                     yield json.dumps({"response": chunk.response}) + "\n"
                 self.session_manager.add_messages(session, messages)
 

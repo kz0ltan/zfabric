@@ -135,11 +135,11 @@ def send_query(
             json=post_data,
             stream=params["stream"],
             params=params,
-            timeout=10,
+            timeout=30,
         )
     else:
         query_response = requests.get(
-            generation_url, headers=headers, params=params, timeout=10
+            generation_url, headers=headers, params=params, timeout=30
         )
 
     return query_response
