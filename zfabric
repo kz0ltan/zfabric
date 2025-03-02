@@ -7,23 +7,29 @@ import json
 import os
 import select
 import sys
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Union
 
 from dotenv import load_dotenv
 import pyperclip
 import requests
 
-import tools.yt
+from tools.extract import yt
+from tools.extract import web
 
 ENV_PATH = "~/.config/zfabric/.env"
 # BASE_URL="http://websrv4.kzoltan.srv:13337"
 BASE_URL = "http://localhost:13337"
 
+# ANSI Escape Codes
+BOLD_START = "\033[1m"
+BOLD_END = "\033[0m"
+
 
 def validate_key_value(arg):
     """Simple test to check if key-value pair is readable"""
     if "=" not in arg:
-        raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
+        raise argparse.ArgumentTypeError(
+            f"Argument '{arg}' is not in key=value format")
     return arg
 
 
@@ -32,50 +38,64 @@ def parse_variables(variables_to_parse):
     return dict([v.split("=") for v in variables_to_parse])
 
 
+def stdin_has_pipe():
+    """Check if there is a pipe connected to stdin"""
+    return not sys.stdin.isatty()
+
+
 def stdin_has_data():
-    """Test stdin for data"""
-    if sys.stdin.isatty():  # No data if running interactively
+    """Test stdin for data
+    Not used!
+    """
+    if not stdin_has_pipe():
         return False
-    return select.select([sys.stdin], [], [], 0)[0] != []
+    try:
+        print("waiting for data")
+        return select.select([sys.stdin], [], [], 0)[0] != []
+    except ValueError:  # stdin might be closed
+        return False
 
 
-def get_yt_data(yt_url):
+def get_yt_data(yt_url: str, transcripts: bool = True, metadata: bool = False, comments: bool = False):
     """Wrapper to external function to get data from YT"""
     options = type(
         "",
         (),
         {
             "duration": False,
-            "transcript": False,
-            "comments": False,
-            "metadata": False,
+            "transcript": transcripts,
+            "comments": comments,
+            "metadata": metadata,
             "lang": "en",
         },
     )()
-    return tools.yt.main_function(yt_url, options, return_only=True)
+    return yt.main_function(yt_url, options, return_only=True)
 
 
 def get_web_data(web_url: str):
     """Wrapper to external function that scrapes a URL and returns text"""
-    return ""
+    return web.extract(web_url, "jina.ai")
 
 
 def read_input(
     path: Optional[str] = None,
     yt_url: Optional[str] = None,
+    yt_options: Optional[Dict[str, bool]] = None,
     web_url: Optional[str] = None,
 ) -> Dict[str, str]:
     """Read input from file/stdin or other sources"""
+    if yt_options is None:
+        yt_options = {}
     input_data = {"input": ""}
 
     if path:
-        with open(path, "r", encoding="utf-8") as f:
-            input_data["input"] = f.read()
-    elif stdin_has_data():
+        with open(path, "r", encoding="utf-8") as f_desc:
+            input_data["input"] = f_desc.read()
+    elif stdin_has_pipe():
         input_data["input"] = sys.stdin.read().rstrip()
 
     if yt_url:
-        yt_data = get_yt_data(yt_url)
+        yt_data = get_yt_data(yt_url, **yt_options)
         input_data["yt_input"] = json.dumps(yt_data)
 
     if web_url:
@@ -83,6 +103,23 @@ def read_input(
         input_data["web_input"] = json.dumps(web_data)
 
     return input_data
+
+
+def coalesce_input(data: Dict[str, str]):
+    if "yt_input" in data:
+        if len(data["input"]) == 0:
+            data["input"] = data["yt_input"]
+        else:
+            data["input"] += "\n\n" + data["yt_input"]
+        del data["yt_input"]
+    if "web_input" in data:
+        if len(data["input"]) == 0:
+            data["input"] = data["web_input"]
+        else:
+            data["input"] += "\n\n" + data["web_input"]
+        del data["web_input"]
+
+    return data
 
 
 def file_exists(file_path):
@@ -150,12 +187,13 @@ def print_usage(need_print: bool, response_json: Dict):
     if need_print and "usage" in response_json:
         print()
         print(f"Prompt tokens: {response_json['usage']['prompt_tokens']}")
-        print(f"Completion tokens: {response_json['usage']['completion_tokens']}")
+        print(
+            f"Completion tokens: {response_json['usage']['completion_tokens']}")
         print(f"Total tokens: {response_json['usage']['total_tokens']}")
 
 
 def print_error(response_json):
-    """Print usage data from HTTP responses"""
+    """Print error data from HTTP responses"""
     if "error" in response_json:
         print("Error: " + response_json["error"])
 
@@ -211,21 +249,110 @@ def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None):
     2. copy to clipboard
     """
 
-    print(output)
+    if len(output):
+        print(output)
     write_alternative_outputs(output, ccopy=ccopy, ofile=ofile)
 
 
 def print_list(
     response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None
 ):
-    """Print list of strings to stdout and optionally:
-    1. save to file
-    2. copy to clipboard
-    """
+    """Print list of strings using print_str"""
 
+    output = ""
     for elem in response_list:
-        print(elem)
-    write_alternative_outputs("\n".join(response_list), ccopy=ccopy, ofile=ofile)
+        output += elem
+        if elem != response_list[-1]:
+            output += "\n"
+    print_str(output, ccopy=ccopy, ofile=ofile)
+
+
+def print_chat(response_list: List[Dict[str, Any]],
+               ccopy: bool = False, ofile: Optional[str] = None):
+    """Print list of messages using print_str"""
+
+    output = ""
+    for msg in response_list:
+        role = msg["data"]["role"]
+        content = msg["data"]["content"].strip()
+        if role == "assistant":
+            metadata = msg["data"]["response_metadata"]
+            # timestamp = metadata["timestamp"]
+            model = metadata["model"]
+            output += f"{BOLD_START}{role.title()} ({model}){BOLD_END}: {content}"
+        else:
+            output += f"{BOLD_START}{role.title()}{BOLD_END}: {content}"
+        if msg != response_list[-1]:
+            output += "\n"
+    print_str(output, ccopy=ccopy, ofile=ofile)
+
+
+def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None):
+    """Print a session's history"""
+    url = BASE_URL + "/session/" + session
+
+    query_params = {
+        "session": session,
+    }
+    resp = send_query(url, query_params).json()
+    print_error(resp)
+    if "response" in resp:
+        print_chat(
+            resp["response"],
+            ofile=ofile,
+            ccopy=ccopy,
+        )
+
+
+def list_objects(object_name: str, ccopy: bool = False, ofile: Optional[str] = None):
+    """Print objects defined by -l cli argument"""
+    resp = send_query(BASE_URL + "/" + object_name).json()
+    print_error(resp)
+    if "response" in resp:
+        print_list(resp["response"], ccopy=ccopy, ofile=ofile)
+
+
+def query_server(
+    qry_str: str,
+    args: argparse.Namespace,
+    post_data: Dict[str, str],
+    qparams: Dict[str, Union[str, int, bool]] = {},  # used to overrride args
+):
+
+    query_params = {
+        "profile": qparams.get("profile", args.profile),
+        "variables": qparams.get("variable", args.variable),
+        "model": qparams.get("model", args.model),
+        "options": qparams.get("options", json.dumps(set_options(args))),
+        "stream": qparams.get("stream", not args.no_stream),
+        "session": qparams.get("session", args.session),
+    }
+
+    while True:
+        resp = send_query(qry_str, query_params, post_data)
+        print_response(
+            resp,
+            ofile=args.ofile,
+            ccopy=args.copy,
+            stream=bool(qparams.get("stream", not args.no_stream)),
+            usage=not args.no_stream and args.usage,
+        )
+        if not args.chat:
+            return
+
+        if not sys.stdin.isatty():
+            # reopen tty as we lost that with sys.stdin.read()
+            sys.stdin = open("/dev/tty", "r", encoding="utf-8")
+        post_data = {}
+        post_data["input"] = input("> ")
+
+
+def get_yt_options(args: argparse.Namespace):
+    return {
+        "metadata": args.yt_metadata,
+        "comments": args.yt_comments,
+        "transcripts": args.yt_transcripts,
+    }
 
 
 class CustomAction(argparse.Action):
@@ -260,7 +387,10 @@ if __name__ == "__main__":
         const="patterns",
         help="List patterns/profiles/sessions",
     )
-    group.add_argument("-p", "--pattern", default=None, help="Pattern to use")
+    group.add_argument("-p", "--pattern", default=None,
+                       help="Pattern to use")
+    group.add_argument("--tokens", default=False, action="store_true",
+                       help="Count tokens in input and exit")
 
     parser.add_argument(
         "-i", "--ifile", type=file_exists, default=None, help="Input file path"
@@ -275,14 +405,37 @@ if __name__ == "__main__":
         action="store_true",
         help="Copy output to clipboard",
     )
+    parser.add_argument(
+        "--chat",
+        default=False,
+        action="store_true",
+        help="Start chat session",
+    )
     # parser.add_argument('-a', '--attachment', type=file_exists, default=None,
     #        help="File attachment path or URL")
     parser.add_argument(
-        "-y",
-        "--youtube",
+        "--yt",
         type=str,
         default=None,
         help="YT URL to download transcript and use it as {{input}} or {{yt_input}}",
+    )
+    parser.add_argument(
+        "--yt-transcripts",
+        default=True,
+        action="store_false",
+        help="Download video transcript (default)"
+    )
+    parser.add_argument(
+        "--yt-metadata",
+        default=False,
+        action="store_true",
+        help="Download video metadata"
+    )
+    parser.add_argument(
+        "--yt-comments",
+        default=False,
+        action="store_true",
+        help="Download video comments"
     )
     parser.add_argument(
         "-u",
@@ -301,7 +454,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--usage",
-        type=bool,
+        action="store_true",
         default=False,
         help="Print token usage if streaming (currently the Azure API is buggy)",
     )
@@ -348,7 +501,8 @@ if __name__ == "__main__":
         "about new topics.",
     )
     parser.add_argument(
-        "-s", "--session", default=None, type=str, help="Session name to insert/query"
+        "-s", "--session", default=None, type=str,
+        help="Session name to insert/query, use 'skip' to skip saving session"
     )
 
     parser.add_argument(
@@ -360,52 +514,37 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable streaming response (default: False)",
     )
-    parser.add_argument("-m", "--model", default=None, help="Model to query")
+    parser.add_argument("-m", "--model", default=None,
+                        help="Model to query")
 
-    args = parser.parse_args()
-    variables = parse_variables(args.variable)
+    cli_args = parser.parse_args()
+    variables = parse_variables(cli_args.variable)
     load_dotenv(os.path.expanduser(ENV_PATH))
 
-    data = read_input(args.ifile, args.youtube, args.url)
-    # TODO: data has multiple keys in it!
+    data = read_input(
+        cli_args.ifile,
+        cli_args.youtube,
+        get_yt_options(cli_args),
+        cli_args.url
+    )
+    data = coalesce_input(data)
 
-    if args.list:
-        resp = send_query(BASE_URL + "/" + args.list).json()
-        print_error(resp)
-        if "response" in resp:
-            print_list(resp["response"], ccopy=args.copy, ofile=args.ofile)
-    elif args.pattern:
-        url = BASE_URL + "/patterns/" + args.pattern
-
-        query_params = {
-            "profile": args.profile,
-            "variables": variables,
-            "model": args.model,
-            "options": json.dumps(set_options(args)),
-            "stream": not args.no_stream,
-            "session": args.session,
-        }
-
-        resp = send_query(url, query_params, data)
-        print_response(
-            resp,
-            ofile=args.ofile,
-            ccopy=args.copy,
-            stream=not args.no_stream,
-            usage=not args.no_stream and args.usage,
+    if cli_args.list:
+        if cli_args.session:
+            list_sessions(cli_args.session, ccopy=cli_args.copy,
+                          ofile=cli_args.ofile)
+        else:
+            list_objects(cli_args.list, ccopy=cli_args.copy,
+                         ofile=cli_args.ofile)
+    elif cli_args.tokens:
+        query_server(
+            BASE_URL + "/tokens", cli_args, data,
+            qparams={"stream": False}
         )
-    elif args.session:
-        url = BASE_URL + "/session/" + args.session
-
-        query_params = {
-            "stream": not args.no_stream,
-            "session": args.session,
-        }
-        resp = send_query(url, query_params)
-        print_response(
-            resp,
-            ofile=args.ofile,
-            ccopy=args.copy,
-        )
+    elif cli_args.pattern:
+        query_server(BASE_URL + "/patterns/" +
+                     cli_args.pattern, cli_args, data)
+    elif len(data["input"]) > 0 and cli_args.session:
+        query_server(BASE_URL + "/session", cli_args, data)
     else:
-        print_str(data["input"], ccopy=args.copy, ofile=args.ofile)
+        print_str(data["input"], ccopy=cli_args.copy, ofile=cli_args.ofile)

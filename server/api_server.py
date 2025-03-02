@@ -11,10 +11,11 @@ import logging
 import os
 from pathlib import Path
 import re
-from typing import Dict, List, Optional, Iterable, Any
+from typing import Dict, List, Optional, Iterable, Any, Union
 
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
+from groq import Groq
 from langchain_core.messages.chat import ChatMessage, ChatMessageChunk
 from langchain_core.messages.utils import merge_message_runs
 from langchain_core.messages import message_to_dict
@@ -45,7 +46,7 @@ class FabricAPIServer:
 
         self.variable_handler = VariableHandler(self.config)
         self.session_manager = SessionManager(self.config)
-        self.generator = AnswerGenerator(
+        self.generator = Generator(
             self.config, smanager=self.session_manager)
 
     def check_auth_token(self, token: str):
@@ -117,6 +118,12 @@ class FabricAPIServer:
     def add_routes(self):
         """Add routes to the application"""
 
+        @self.app.route("/tokens", methods=["POST"])
+        @self.auth_required
+        def count_tokens():
+            text = request.get_json()["input"]
+            return jsonify({"response": str(self.generator.count_tokens(text))})
+
         @self.app.route("/profiles", methods=["GET"])
         @self.auth_required
         def list_profiles():
@@ -157,8 +164,9 @@ class FabricAPIServer:
             )
 
         @self.app.route("/patterns/<pattern>", methods=["POST"])
+        @self.app.route("/session", methods=["POST"])
         @self.auth_required
-        def milling(pattern: str):
+        def milling(pattern: Optional[str] = None):
             """Combine fabric pattern with input from user and send to OpenAI's GPT-4 model.
 
             Returns:
@@ -178,9 +186,15 @@ class FabricAPIServer:
             )
             session = request.args.get(
                 "session",
-                default=generate_random_number(10),
+                default=datetime.datetime.today().strftime('%Y-%m-%d-') +
+                str(generate_random_number(5)),
             )
-            variables = request.args.get("variables", default={})
+            # skip saving session
+            if session == "skip":
+                session = None
+
+            variables: Dict[str, Union[str, int]] = request.args.get(
+                "variables", default={})
 
             if options:
                 options = json.loads(options)
@@ -191,41 +205,65 @@ class FabricAPIServer:
 
             input_data = data["input"]
 
-            for ppath in self.config["pattern_paths"]:
-                pattern_path = Path(ppath) / pattern
-                if pattern_path.exists():
-                    break
-                if ppath == self.config["pattern_paths"][-1]:
-                    return jsonify({"error": "Pattern not found"}), 400
-
-            system_prompt = load_file(pattern_path / "system.md", "")
-            user_prompt = load_file(pattern_path / "user.md", "")
-
-            system_prompt = self.variable_handler.resolve(
-                system_prompt, variables)
-            user_prompt = self.variable_handler.resolve(user_prompt, variables)
-
-            # Build the API call
-            # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
+            messages = []
+            new_messages = []
+            user_prompt = ""
             timestamp = datetime.datetime.now().timestamp()
-            system_message = ChatMessage(
-                content=system_prompt,
-                role="system",
-                response_metadata={"timestamp": timestamp}
-            )
+
+            if session in self.session_manager.get_session_names():
+                messages += self.session_manager.get_session(session).messages
+            elif pattern is not None:
+                # session exists, patterns are used
+                for ppath in self.config["pattern_paths"]:
+                    pattern_path = Path(ppath) / pattern
+                    if pattern_path.exists():
+                        break
+                    if ppath == self.config["pattern_paths"][-1]:
+                        return jsonify({"error": "Pattern not found"}), 400
+
+                system_prompt = load_file(pattern_path / "system.md", "")
+                user_prompt = load_file(pattern_path / "user.md", "")
+
+                system_prompt = self.variable_handler.resolve(
+                    system_prompt, variables)
+                user_prompt = self.variable_handler.resolve(
+                    user_prompt, variables)
+
+                # Build the API call
+                # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
+                system_message = ChatMessage(
+                    content=system_prompt,
+                    role="system",
+                    response_metadata={
+                        "options": options,
+                        "session": session,
+                        "timestamp": timestamp
+                    }
+                )
+                new_messages.append(system_message)
+
             user_message = ChatMessage(
-                content=user_prompt + "\n" + input_data, role="user",
-                response_metadata={"timestamp": timestamp}
+                content=(user_prompt +
+                         "\n") if len(user_prompt) > 0 else "" + input_data,
+                role="user",
+                response_metadata={
+                    "options": options,
+                    "session": session,
+                    "timestamp": timestamp
+                }
             )
-            messages = [system_message, user_message]
+            new_messages.append(user_message)
+            messages += new_messages
+            self.session_manager.add_messages(
+                session, new_messages, merge=False)
 
             try:
                 return self.generator.generate(
-                    profile_name, model, messages, options, stream, session
+                    profile_name, messages, options, stream, model=model, session=session
                 )
-            except Exception as e:
-                self.app.logger.error("Error occured: %s", e)
-                raise e
+            except Exception as ex:
+                self.app.logger.error("Error occured: %s", ex)
+                raise ex
                 # return jsonify({"error": "An error occurred while processing the request."}), 500
 
 
@@ -251,7 +289,7 @@ class SessionManager:
         self.logger.addHandler(default_handler)
         self.logger.setLevel(logging.INFO)
 
-    @property
+    @ property
     def db_connection(self):
         """Lazy setup of db connection"""
         if self._db_connection:
@@ -274,7 +312,8 @@ class SessionManager:
         self.db_connection.dispose()
 
     def _setup_direct_access(self):
-        if self.metadata is None:
+        # check if reflection from the existing DB file has happened before or not
+        if self.table is None:
             self.metadata = MetaData()
             self.metadata.reflect(bind=self.db_connection)
             self.table = self.metadata.tables.get(self.table_name)
@@ -293,19 +332,20 @@ class SessionManager:
             custom_message_converter=ExMessageConverter(self.table_name)
         )
 
-    def add_messages(self, sess_id: str, messages: List[str]):
+    def add_messages(self, sess_id: str, messages: List[ChatMessage], merge: bool = True):
         """Store new messages in a session"""
         if sess_id is None:
             return
-        messages = merge_message_runs(messages, chunk_separator="")
+        if merge:
+            messages = merge_message_runs(messages, chunk_separator="")
         self.get_session(sess_id).add_messages(messages)
 
     def get_session_names(self) -> List:
         """Retrieves a unique list of session names from the DB"""
         try:
             self._setup_direct_access()
-        except ValueError as e:
-            self.logger.info(str(e))
+        except ValueError as ex:
+            self.logger.info(str(ex))
             return []
 
         with Session(self.db_connection) as session:
@@ -338,7 +378,7 @@ class VariableHandler:
         )
 
 
-class AnswerGenerator:
+class Generator:
     """Handle API connections and text generations using LLM providers"""
 
     def __init__(self, config, smanager: Optional[SessionManager] = None):
@@ -366,7 +406,7 @@ class AnswerGenerator:
 
         return profile_name, self._load_profile(profile_name)
 
-    @staticmethod
+    @ staticmethod
     def _basic_auth(username, password):
         token = b64encode(f"{username}:{password}".encode(
             "utf-8")).decode("ascii")
@@ -404,6 +444,11 @@ class AnswerGenerator:
         assert api_key is not None, "API key for profile not found in config!"
         return openai.OpenAI(api_key=api_key)
 
+    def _get_groq_client(self, profile: Dict):
+        api_key = profile.get("api_key", None)
+        assert api_key is not None, "API key for profile not found in config!"
+        return Groq(api_key=api_key)
+
     def _get_client(self, profile_name):
         if profile_name in self._clients:
             return self._clients[profile_name]
@@ -422,6 +467,8 @@ class AnswerGenerator:
                 profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
+        elif profile["type"].lower() == "groq":
+            self._clients[profile_name] = self._get_groq_client(profile)
         else:
             raise ValueError(f"Uknown profile type: {profile_type}")
 
@@ -467,6 +514,27 @@ class AnswerGenerator:
         else:
             yield response
 
+    def _generate_groq(
+        self,
+        profile_name: str,
+        model: str,
+        messages=List[Dict],
+        stream: bool = False,
+        options: Optional[Dict[str, Any]] = None,
+    ):
+        client = self._get_client(profile_name)
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=stream,
+            # stream_options={"include_usage": True} if stream else None,
+            **options,
+        )
+        if stream:
+            yield from response
+        else:
+            yield response
+
     def _generate_ollama(
         self,
         profile_name: str,
@@ -476,10 +544,9 @@ class AnswerGenerator:
         options: Optional[Dict[str, Any]] = None,
     ):
         client = self._get_client(profile_name)
-        response = client.generate(
+        response = client.chat(
             model=model,
-            system=messages[0]["content"],
-            prompt=messages[1]["content"],
+            messages=messages,
             options=options,
             stream=stream,
         )
@@ -510,27 +577,27 @@ class AnswerGenerator:
 
         return translated, ignored
 
-    @staticmethod
+    @ staticmethod
     def count_tokens(text: str, model: str = "gpt-4o-mini"):
         """Count tokens of text"""
         encoding = tiktoken.encoding_for_model(model)
         tokens = encoding.encode(text)
         return len(tokens)
 
-    @staticmethod
+    @ staticmethod
     def _chatmessages_to_json(messages: List[ChatMessage]):
         """Convert langchain message format to JSON compatible with APIs
         This is needed, because of the non-langchain implementation of generate()
         """
-        return [{"role": msg.type, "content": msg.content} for msg in messages]
+        return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     def generate(
         self,
         profile_name: str,
-        model: str,
         messages: List[ChatMessage],
         options: Dict[str, Any],
         stream: bool,
+        model: Optional[str] = None,
         session: Optional[str] = None,
     ):
         """Main function, generates text based on messages"""
@@ -587,9 +654,13 @@ class AnswerGenerator:
                                 messages.append(
                                     ChatMessageChunk(
                                         content=txt,
-                                        role="ai",
+                                        role="assistant",
                                         response_metadata={
-                                            "timestamp": timestamp},
+                                            "model": model,
+                                            "options": options,
+                                            "session": session,
+                                            "timestamp": timestamp
+                                        }
                                     )
                                 )
                             if chunk.choices[0].finish_reason == "stop":
@@ -606,8 +677,13 @@ class AnswerGenerator:
                         messages.append(
                             ChatMessage(
                                 content=txt,
-                                role="ai",
-                                response_metadata={"timestamp": timestamp},
+                                role="assistant",
+                                response_metadata={
+                                    "model": model,
+                                    "options": options,
+                                    "session": session,
+                                    "timestamp": timestamp
+                                }
                             )
                         )
                         yield json.dumps(
@@ -625,6 +701,74 @@ class AnswerGenerator:
 
             return Response(response_stream_openai(), content_type="application/json")
 
+        if service == "groq":
+            translated_options, ignored_options = self.translate_options_to_openai(
+                options
+            )
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
+
+            def response_stream_groq():
+                messages = []
+                for chunk in self._generate_groq(
+                    profile_name, model, api_messages, stream=stream, options=options
+                ):
+                    if stream:
+                        ret = {}
+                        if len(chunk.choices):
+                            if chunk.choices[0].delta.content is not None:
+                                txt = chunk.choices[0].delta.content
+                                ret["response"] = txt
+                                messages.append(
+                                    ChatMessageChunk(
+                                        content=txt,
+                                        role="assistant",
+                                        response_metadata={
+                                            "model": model,
+                                            "options": options,
+                                            "session": session,
+                                            "timestamp": timestamp
+                                        }
+                                    )
+                                )
+                            if chunk.choices[0].finish_reason == "stop":
+                                ret["last_chunk"] = True
+                        if chunk.choices[0].finish_reason:
+                            ret["usage"] = {
+                                "prompt_tokens": chunk.x_groq.usage.prompt_tokens,
+                                "completion_tokens": chunk.x_groq.usage.completion_tokens,
+                                "total_tokens": chunk.x_groq.usage.total_tokens,
+                            }
+                        yield json.dumps(ret) + "\n"
+                    else:
+                        txt = chunk.choices[0].message.content
+                        messages.append(
+                            ChatMessage(
+                                content=txt,
+                                role="assistant",
+                                response_metadata={
+                                    "model": model,
+                                    "options": options,
+                                    "session": session,
+                                    "timestamp": timestamp
+                                }
+                            )
+                        )
+                        yield json.dumps(
+                            {
+                                "response": txt,
+                                "usage": {
+                                    "prompt_tokens": chunk.x_groq.usage.prompt_tokens,
+                                    "completion_tokens": chunk.x_groq.usage.completion_tokens,
+                                    "total_tokens": chunk.x_groq.usage.total_tokens,
+                                },
+                                "ignored_options": ",".join(ignored_options),
+                            }
+                        )
+                self.session_manager.add_messages(session, messages)
+
+            return Response(response_stream_groq(), content_type="application/json")
+
         if service == "ollama":
 
             def response_stream_ollama():
@@ -633,11 +777,16 @@ class AnswerGenerator:
                     profile_name, model, api_messages, stream=stream, options=options
                 ):
                     messages.append(ChatMessageChunk(
-                        content=chunk.response,
-                        role="ai",
-                        response_metadata={"timestamp": timestamp},
+                        content=chunk.message.content,
+                        role="assistant",
+                        response_metadata={
+                            "model": model,
+                            "options": options,
+                            "session": session,
+                            "timestamp": timestamp
+                        }
                     ))
-                    yield json.dumps({"response": chunk.response}) + "\n"
+                    yield json.dumps({"response": chunk.message.content}) + "\n"
                 self.session_manager.add_messages(session, messages)
 
             return Response(response_stream_ollama(), content_type="application/json")

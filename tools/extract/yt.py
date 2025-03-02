@@ -10,9 +10,9 @@ import os
 import json
 import isodate
 import argparse
-import sys
 
-ENV_PATH="~/.config/zfabric/.env"
+ENV_PATH = "~/.config/zfabric/.env"
+
 
 def get_video_id(url):
     # Extract video ID from URL
@@ -60,7 +60,6 @@ def get_comments(youtube, video_id):
     return comments
 
 
-
 def main_function(url, options, return_only=False):
     # Load environment variables from .env file
     load_dotenv(os.path.expanduser(ENV_PATH))
@@ -92,14 +91,17 @@ def main_function(url, options, return_only=False):
         # Set up metadata
         metadata = {}
         metadata['id'] = video_response['items'][0]['id']
+        metadata['description'] = video_response["items"][0]["snippet"]["description"]
         metadata['title'] = video_response['items'][0]['snippet']['title']
         metadata['channel'] = video_response['items'][0]['snippet']['channelTitle']
         metadata['published_at'] = video_response['items'][0]['snippet']['publishedAt']
 
         # Get video transcript
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=[options.lang])
-            transcript_text = " ".join([item["text"] for item in transcript_list])
+            transcript_list = YouTubeTranscriptApi.get_transcript(
+                video_id, languages=[options.lang])
+            transcript_text = " ".join([item["text"]
+                                       for item in transcript_list])
             transcript_text = transcript_text.replace("\n", " ")
         except Exception as e:
             transcript_text = f"Transcript not available in the selected language ({options.lang}). ({e})"
@@ -124,7 +126,7 @@ def main_function(url, options, return_only=False):
                 "transcript": transcript_text,
                 "duration": duration_minutes,
                 "comments": comments,
-                "metadata": metadata
+                "metadata": metadata,
             }
             if return_only:
                 return output
@@ -132,18 +134,24 @@ def main_function(url, options, return_only=False):
                 # Print JSON object
                 print(json.dumps(output, indent=2))
     except HttpError as e:
-        print(f"Error: Failed to access YouTube API. Please check your YOUTUBE_API_KEY and ensure it is valid: {e}")
+        print(
+            f"Error: Failed to access YouTube API. Please check your YOUTUBE_API_KEY and ensure it is valid: {e}")
 
 
 def main():
     parser = argparse.ArgumentParser(
         description='yt (video meta) extracts metadata about a video, such as the transcript, the video\'s duration, and now comments. By Daniel Miessler.')
     parser.add_argument('url', help='YouTube video URL')
-    parser.add_argument('--duration', action='store_true', help='Output only the duration')
-    parser.add_argument('--transcript', action='store_true', help='Output only the transcript')
-    parser.add_argument('--comments', action='store_true', help='Output the comments on the video')
-    parser.add_argument('--metadata', action='store_true', help='Output the video metadata')
-    parser.add_argument('--lang', default='en', help='Language for the transcript (default: English)')
+    parser.add_argument('--duration', action='store_true',
+                        help='Output only the duration')
+    parser.add_argument('--transcript', action='store_true',
+                        help='Output only the transcript')
+    parser.add_argument('--comments', action='store_true',
+                        help='Output the comments on the video')
+    parser.add_argument('--metadata', action='store_true',
+                        help='Output the video metadata')
+    parser.add_argument('--lang', default='en',
+                        help='Language for the transcript (default: English)')
 
     args = parser.parse_args()
 
@@ -152,6 +160,7 @@ def main():
         return
 
     main_function(args.url, args)
+
 
 if __name__ == "__main__":
     main()

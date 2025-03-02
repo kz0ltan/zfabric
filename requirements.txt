@@ -10,3 +10,5 @@ google-api-python-client
 gunicorn
 langchain
 langchain-community
+groq
+praw
