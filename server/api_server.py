@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 from typing import Dict, List, Optional, Iterable, Any, Union
 
+from anthropic import Anthropic
 from flask import Flask, request, jsonify, Response
 from flask.logging import default_handler
 from groq import Groq
@@ -449,6 +450,11 @@ class Generator:
         assert api_key is not None, "API key for profile not found in config!"
         return Groq(api_key=api_key)
 
+    def _get_anthropic_client(self, profile: Dict):
+        api_key = profile.get("api_key", None)
+        assert api_key is not None, "API key for profile not found in config!"
+        return Anthropic(api_key)
+
     def _get_client(self, profile_name):
         if profile_name in self._clients:
             return self._clients[profile_name]
@@ -469,6 +475,8 @@ class Generator:
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
             self._clients[profile_name] = self._get_groq_client(profile)
+        elif profile["type"].lower() == "anthropic":
+            self._clients[profile_name] = self._get_anthropic_client(profile)
         else:
             raise ValueError(f"Uknown profile type: {profile_type}")
 
@@ -529,6 +537,26 @@ class Generator:
             stream=stream,
             # stream_options={"include_usage": True} if stream else None,
             **options,
+        )
+        if stream:
+            yield from response
+        else:
+            yield response
+
+    def _generate_anthropic(
+        self,
+        profile_name: str,
+        model: str,
+        messages=List[Dict],
+        stream: bool = False,
+        options: Optional[Dict[str, Any]] = None,
+    ):
+        client = self._get_client(profile_name)
+        response = client.messages.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **options
         )
         if stream:
             yield from response
@@ -768,6 +796,10 @@ class Generator:
                 self.session_manager.add_messages(session, messages)
 
             return Response(response_stream_groq(), content_type="application/json")
+
+        if service == "anthropic":
+
+            pass  # TODO
 
         if service == "ollama":
 
