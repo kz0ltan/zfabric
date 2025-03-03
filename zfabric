@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import select
+import signal
 import sys
 from typing import List, Dict, Optional, Any, Union
 
@@ -35,6 +36,11 @@ def validate_key_value(arg):
 def parse_variables(variables_to_parse):
     """Return a dict of variables"""
     return dict([v.split("=") for v in variables_to_parse])
+
+
+def signal_handler(sig, frame):
+    print("\n")
+    sys.exit(0)
 
 
 def stdin_has_pipe():
@@ -159,17 +165,23 @@ def set_options(parsed_args):
 
 
 def send_query(
-    generation_url: str, params: Optional[Dict] = None, post_data: Optional[Dict] = None
+    generation_url: str,
+    params: Optional[Dict] = None,
+    post_data: Optional[Dict] = None,
+    method: str = "GET",
 ):
     """Send query to generation endpoint"""
     if params is None:
         params = {}
 
+    if post_data is not None and method == "GET":
+        method = "POST"
+
     headers = {
         "Authorization": "bearer " + str(os.getenv("ZF_SERVER_TOKEN")),
         "Content-Type": "Application/json",
     }
-    if post_data is not None:
+    if method == "POST":
         query_response = requests.post(
             generation_url,
             headers=headers,
@@ -178,8 +190,12 @@ def send_query(
             params=params,
             timeout=30,
         )
-    else:
+    elif method == "GET":
         query_response = requests.get(
+            generation_url, headers=headers, params=params, timeout=30
+        )
+    elif method == "DELETE":
+        query_response = requests.delete(
             generation_url, headers=headers, params=params, timeout=30
         )
 
@@ -323,6 +339,7 @@ def query_server(
     args: argparse.Namespace,
     post_data: Dict[str, str],
     qparams: Dict[str, Union[str, int, bool]] = {},  # used to overrride args
+    method: str = "GET",
 ):
     query_params = {
         "profile": qparams.get("profile", args.profile),
@@ -334,7 +351,7 @@ def query_server(
     }
 
     while True:
-        resp = send_query(qry_str, query_params, post_data)
+        resp = send_query(qry_str, query_params, post_data, method=method)
         print_response(
             resp,
             ofile=args.ofile,
@@ -380,6 +397,8 @@ class CustomAction(argparse.Action):
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
+
     parser = argparse.ArgumentParser(description="zFabric client application")
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument(
@@ -391,6 +410,9 @@ if __name__ == "__main__":
         choices=["profiles", "patterns", "sessions"],
         const="patterns",
         help="List patterns/profiles/sessions",
+    )
+    group.add_argument(
+        "--delete", default=False, action="store_true", help="Used to delete a session"
     )
     group.add_argument("-p", "--pattern", default=None, help="Pattern to use")
     group.add_argument(
@@ -541,6 +563,14 @@ if __name__ == "__main__":
             list_sessions(cli_args.session, ccopy=cli_args.copy, ofile=cli_args.ofile)
         else:
             list_objects(cli_args.list, ccopy=cli_args.copy, ofile=cli_args.ofile)
+    elif cli_args.delete and cli_args.session:
+        query_server(
+            BASE_URL + "/session/" + cli_args.session,
+            cli_args,
+            data,
+            qparams={"stream": False},
+            method="DELETE",
+        )
     elif cli_args.tokens:
         query_server(BASE_URL + "/tokens", cli_args, data, qparams={"stream": False})
     elif cli_args.pattern:

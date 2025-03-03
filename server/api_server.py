@@ -23,7 +23,7 @@ from langchain_core.messages import message_to_dict
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 import ollama
 import openai
-from sqlalchemy import create_engine, select, distinct, MetaData
+from sqlalchemy import create_engine, select, distinct, MetaData, delete
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 import tiktoken
@@ -151,17 +151,24 @@ class FabricAPIServer:
         def list_session():
             return jsonify({"response": self.session_manager.get_session_names()})
 
-        @self.app.route("/session/<session>", methods=["GET"])
+        @self.app.route("/session/<session>", methods=["GET", "DELETE"])
         @self.auth_required
         def get_session(session: str):
-            return jsonify(
-                {
-                    "response": [
-                        message_to_dict(msg)
-                        for msg in self.session_manager.get_session(session).messages
-                    ]
-                }
-            )
+            if request.method == "GET":
+                return jsonify(
+                    {
+                        "response": [
+                            message_to_dict(msg)
+                            for msg in self.session_manager.get_session(
+                                session
+                            ).messages
+                        ]
+                    }
+                )
+
+            if request.method == "DELETE":
+                self.session_manager.delete_session(session)
+                return jsonify({"response": ""})
 
         @self.app.route("/patterns/<pattern>", methods=["POST"])
         @self.app.route("/session", methods=["POST"])
@@ -364,6 +371,30 @@ class SessionManager:
             session_ids = [row[0] for row in result]
 
         return session_ids
+
+    def delete_session(self, sess_id: str):
+        """Deletes all messages from a specific session"""
+        try:
+            self._setup_direct_access()
+        except ValueError as ex:
+            self.logger.info(str(ex))
+            return False
+
+        with Session(self.db_connection) as session:
+            stmt = delete(self.table).where(
+                self.table.c[self.session_id_field_name] == sess_id
+            )
+            result = session.execute(stmt)
+            session.commit()
+
+            if result.rowcount > 0:
+                self.logger.info(
+                    f"Deleted {result.rowcount} messages from session: {sess_id}"
+                )
+            else:
+                self.logger.info(f"No messages found in session: {sess_id}")
+
+        return True
 
 
 class VariableHandler:
