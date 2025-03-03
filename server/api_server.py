@@ -232,8 +232,10 @@ class FabricAPIServer:
                 system_prompt = load_file(pattern_path / "system.md", "")
                 user_prompt = load_file(pattern_path / "user.md", "")
 
-                system_prompt = self.variable_handler.resolve(system_prompt, variables)
-                user_prompt = self.variable_handler.resolve(user_prompt, variables)
+                system_prompt = self.variable_handler.resolve(
+                    system_prompt, variables)
+                user_prompt = self.variable_handler.resolve(
+                    user_prompt, variables)
 
                 # Build the API call
                 # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -261,7 +263,8 @@ class FabricAPIServer:
             )
             new_messages.append(user_message)
             messages += new_messages
-            self.session_manager.add_messages(session, new_messages, merge=False)
+            self.session_manager.add_messages(
+                session, new_messages, merge=False)
 
             try:
                 return self.generator.generate(
@@ -365,7 +368,8 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(
+                distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -381,9 +385,12 @@ class SessionManager:
             return False
 
         with Session(self.db_connection) as session:
-            stmt = delete(self.table).where(
-                self.table.c[self.session_id_field_name] == sess_id
-            )
+            stmt = delete(self.table)
+
+            if sess_id != "all":
+                stmt = stmt.where(
+                    self.table.c[self.session_id_field_name] == sess_id
+                )
             result = session.execute(stmt)
             session.commit()
 
@@ -438,7 +445,8 @@ class Generator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -446,7 +454,8 @@ class Generator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode(
+            "utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -489,7 +498,7 @@ class Generator:
     def _get_anthropic_client(self, profile: Dict):
         api_key = profile.get("api_key", None)
         assert api_key is not None, "API key for profile not found in config!"
-        return Anthropic(api_key)
+        return Anthropic(api_key=api_key)
 
     def _get_client(self, profile_name):
         if profile_name in self._clients:
@@ -505,7 +514,8 @@ class Generator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
@@ -587,13 +597,18 @@ class Generator:
         options: Optional[Dict[str, Any]] = None,
     ):
         client = self._get_client(profile_name)
+
+        system = None
+        # Anthropic accepts system messages in a different way
+        if messages[0]["role"] == "system":
+            system = messages[0]["content"]
+            messages.pop(0)
+
         response = client.messages.create(
-            model=model, messages=messages, stream=True, **options
+            model=model, messages=messages, system=system, stream=True, **options
         )
-        if stream:
-            yield from response
-        else:
-            yield response
+
+        yield from response
 
     def _generate_ollama(
         self,
@@ -615,17 +630,24 @@ class Generator:
         else:
             yield response
 
-    def translate_options_to_openai(self, options: Dict[str, Any]):
+    def translate_options(self, options: Dict[str, Any], flavor: str = "openai"):
         """Translate keys in options dict to OpenAI compatible keys
         Anything not found in mappign will be ignored!
         """
-        mapping = {  # "ollama_name": "openai_name"
-            "temperature": "temperature",
-            "num_predict": "max_completion_tokens",
-            "top_p": "top_p",
-            "presence_penalty": "presence_penalty",
-            "frequency_penalty": "frequency_penalty",
-        }
+        if flavor == "openai":
+            mapping = {  # "ollama_name": "openai_name"
+                "temperature": "temperature",
+                "num_predict": "max_completion_tokens",
+                "top_p": "top_p",
+                "presence_penalty": "presence_penalty",
+                "frequency_penalty": "frequency_penalty",
+            }
+        elif flavor == "anthropic":
+            mapping = {  # "ollama_name": "anthropic_name"
+                "temperature": "temperature",
+                "num_predict": "max_tokens",
+                "top_p": "top_p",
+            }
 
         ignored = []
         translated = {}
@@ -685,10 +707,11 @@ class Generator:
         timestamp = datetime.datetime.now().timestamp()
 
         if service in ("openai", "azure_openai"):
-            translated_options, ignored_options = self.translate_options_to_openai(
+            translated_options, ignored_options = self.translate_options(
                 options
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -761,15 +784,16 @@ class Generator:
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "groq":
-            translated_options, ignored_options = self.translate_options_to_openai(
+            translated_options, ignored_options = self.translate_options(
                 options
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_groq():
                 messages = []
                 for chunk in self._generate_groq(
-                    profile_name, model, api_messages, stream=stream, options=options
+                    profile_name, model, api_messages, stream=stream, options=translated_options
                 ):
                     if stream:
                         ret = {}
@@ -828,7 +852,93 @@ class Generator:
             return Response(response_stream_groq(), content_type="application/json")
 
         if service == "anthropic":
-            pass  # TODO
+            translated_options, ignored_options = self.translate_options(
+                options, flavor="anthropic"
+            )
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
+
+            def response_stream_anthropic():
+                messages = []
+                if "max_tokens" not in options:
+                    options["max_tokens"] = 4096
+                if stream:
+                    ret = {"response": ""}
+                    usage = {}
+                    for chunk in self._generate_anthropic(
+                        profile_name, model, api_messages, stream=stream, options=options
+                    ):
+                        if chunk.type == "content_block_delta":
+                            ret["response"] = chunk.delta.text
+                            messages.append(
+                                ChatMessageChunk(
+                                    content=chunk.delta.text,
+                                    role="assistant",
+                                    response_metadata={
+                                        "model": model,
+                                        "options": options,
+                                        "session": session,
+                                        "timestamp": timestamp,
+                                    },
+                                )
+                            )
+
+                        elif chunk.type == "message_start":
+                            usage["cache_creation_input_tokens"] = \
+                                chunk.message.usage.cache_creation_input_tokens
+                            usage["cache_read_input_tokens"] = \
+                                chunk.message.usage.cache_read_input_tokens
+                            usage["input_tokens"] = \
+                                chunk.message.usage.input_tokens
+                            usage["output_tokens"] = \
+                                chunk.message.usage.output_tokens
+
+                        elif chunk.type == "message_delta":
+                            usage["output_tokens"] += chunk.usage.output_tokens
+
+                        if len(ret["response"]) > 0:
+                            yield json.dumps(ret) + "\n"
+                            ret["response"] = ""
+
+                        elif chunk.type == "message_stop":
+                            yield json.dumps({"usage": usage}) + "\n"
+
+                else:
+                    ret = {"response": "", "usage": {}}
+                    for chunk in self._generate_anthropic(
+                        profile_name, model, api_messages, stream=stream, options=options
+                    ):
+                        if chunk.type == "content_block_delta":
+                            ret["response"] += chunk.delta.text
+                            messages.append(
+                                ChatMessageChunk(
+                                    content=chunk.delta.text,
+                                    role="assistant",
+                                    response_metadata={
+                                        "model": model,
+                                        "options": options,
+                                        "session": session,
+                                        "timestamp": timestamp,
+                                    },
+                                )
+                            )
+                        if chunk.type == "message_start":
+                            ret["usage"]["cache_creation_input_tokens"] = \
+                                chunk.message.usage.cache_creation_input_tokens
+                            ret["usage"]["cache_read_input_tokens"] = \
+                                chunk.message.usage.cache_read_input_tokens
+                            ret["usage"]["input_tokens"] = \
+                                chunk.message.usage.input_tokens
+                            ret["usage"]["output_tokens"] = \
+                                chunk.message.usage.output_tokens
+                        if chunk.type == "message_delta":
+                            ret["usage"]["output_tokens"] += chunk.usage.output_tokens
+
+                    yield json.dumps(ret) + "\n"
+
+                self.session_manager.add_messages(session, messages)
+
+            return Response(response_stream_anthropic(), content_type="application/json")
 
         if service == "ollama":
 
@@ -854,7 +964,7 @@ class Generator:
 
             return Response(response_stream_ollama(), content_type="application/json")
 
-        raise ValueError(f"Unknown service {service}")
+        raise ValueError(f"Unknown service '{service}'")
 
 
 def parse_arguments():
