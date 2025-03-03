@@ -1,5 +1,6 @@
 """Helper functions for zfabric"""
 
+import os
 import random
 
 
@@ -25,3 +26,14 @@ def generate_random_number(length: int) -> int:
 
     # Generate a random number within the specified range
     return random.randint(min_value, max_value)
+
+
+def ensure_directories_exist(path: str) -> None:
+    """Checks if the directories in the provided path exist and creates them if not"""
+    abs_path = os.path.expanduser(os.path.dirname(path))
+
+    if not os.path.exists(abs_path):
+        os.makedirs(abs_path)
+        print(f"Created directories: {abs_path}")
+    else:
+        print(f"Directories already exist: {abs_path}")

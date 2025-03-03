@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 import tiktoken
 
-from helpers import load_file, generate_random_number
+from helpers import load_file, generate_random_number, ensure_directories_exist
 from lib.lc import ExMessageConverter
 
 
@@ -47,8 +47,7 @@ class FabricAPIServer:
 
         self.variable_handler = VariableHandler(self.config)
         self.session_manager = SessionManager(self.config)
-        self.generator = Generator(
-            self.config, smanager=self.session_manager)
+        self.generator = Generator(self.config, smanager=self.session_manager)
 
     def check_auth_token(self, token: str):
         """Verify authentication token"""
@@ -187,15 +186,16 @@ class FabricAPIServer:
             )
             session = request.args.get(
                 "session",
-                default=datetime.datetime.today().strftime('%Y-%m-%d-') +
-                str(generate_random_number(5)),
+                default=datetime.datetime.today().strftime("%Y-%m-%d-")
+                + str(generate_random_number(5)),
             )
             # skip saving session
             if session == "skip":
                 session = None
 
             variables: Dict[str, Union[str, int]] = request.args.get(
-                "variables", default={})
+                "variables", default={}
+            )
 
             if options:
                 options = json.loads(options)
@@ -225,10 +225,8 @@ class FabricAPIServer:
                 system_prompt = load_file(pattern_path / "system.md", "")
                 user_prompt = load_file(pattern_path / "user.md", "")
 
-                system_prompt = self.variable_handler.resolve(
-                    system_prompt, variables)
-                user_prompt = self.variable_handler.resolve(
-                    user_prompt, variables)
+                system_prompt = self.variable_handler.resolve(system_prompt, variables)
+                user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
                 # Build the API call
                 # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -238,29 +236,34 @@ class FabricAPIServer:
                     response_metadata={
                         "options": options,
                         "session": session,
-                        "timestamp": timestamp
-                    }
+                        "timestamp": timestamp,
+                    },
                 )
                 new_messages.append(system_message)
 
             user_message = ChatMessage(
-                content=(user_prompt +
-                         "\n") if len(user_prompt) > 0 else "" + input_data,
+                content=(user_prompt + "\n")
+                if len(user_prompt) > 0
+                else "" + input_data,
                 role="user",
                 response_metadata={
                     "options": options,
                     "session": session,
-                    "timestamp": timestamp
-                }
+                    "timestamp": timestamp,
+                },
             )
             new_messages.append(user_message)
             messages += new_messages
-            self.session_manager.add_messages(
-                session, new_messages, merge=False)
+            self.session_manager.add_messages(session, new_messages, merge=False)
 
             try:
                 return self.generator.generate(
-                    profile_name, messages, options, stream, model=model, session=session
+                    profile_name,
+                    messages,
+                    options,
+                    stream,
+                    model=model,
+                    session=session,
                 )
             except Exception as ex:
                 self.app.logger.error("Error occured: %s", ex)
@@ -277,7 +280,8 @@ class SessionManager:
 
     def __init__(self, config: Dict[Any, Any], session_id_field_name: str = ""):
         self.db_path = config.get(
-            "sqlite3_conn_string", "~/.local/share/zfabric/sessions.sqlite3")
+            "sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3"
+        )
         self.table_name = config.get("sqlite3_table_name", "message_store")
         self.session_id_field_name = config.get(
             "sqlite3_session_id_field_name", "session_id"
@@ -290,7 +294,7 @@ class SessionManager:
         self.logger.addHandler(default_handler)
         self.logger.setLevel(logging.INFO)
 
-    @ property
+    @property
     def db_connection(self):
         """Lazy setup of db connection"""
         if self._db_connection:
@@ -300,12 +304,14 @@ class SessionManager:
                 "No 'sqlite3_conn_string' was found in config, using volatile, memory storage!"
             )
         else:
+            ensure_directories_exist(self.db_path)
             self.db_path = "sqlite:///" + os.path.expanduser(self.db_path)
         self._db_connection = self._setup_db_connection(self.db_path)
         return self._db_connection
 
     def _setup_db_connection(self, conn_string: str):
         """Set up a persistent connection to DB"""
+        self.logger.info(f"Opening DB file {conn_string}")
         return create_engine(conn_string)
 
     def close_db_connection(self):
@@ -330,10 +336,12 @@ class SessionManager:
             connection=self.db_connection,
             table_name=self.table_name,
             session_id_field_name=self.session_id_field_name,
-            custom_message_converter=ExMessageConverter(self.table_name)
+            custom_message_converter=ExMessageConverter(self.table_name),
         )
 
-    def add_messages(self, sess_id: str, messages: List[ChatMessage], merge: bool = True):
+    def add_messages(
+        self, sess_id: str, messages: List[ChatMessage], merge: bool = True
+    ):
         """Store new messages in a session"""
         if sess_id is None:
             return
@@ -350,8 +358,7 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(
-                distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -400,17 +407,15 @@ class Generator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get(
-                "profiles", {}).get("default_profile", None)
+            profile_name = self.config.get("profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
         return profile_name, self._load_profile(profile_name)
 
-    @ staticmethod
+    @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode(
-            "utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -469,8 +474,7 @@ class Generator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(
-                profile)
+            self._clients[profile_name] = self._get_azure_openai_client(profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
@@ -553,10 +557,7 @@ class Generator:
     ):
         client = self._get_client(profile_name)
         response = client.messages.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **options
+            model=model, messages=messages, stream=True, **options
         )
         if stream:
             yield from response
@@ -605,14 +606,14 @@ class Generator:
 
         return translated, ignored
 
-    @ staticmethod
+    @staticmethod
     def count_tokens(text: str, model: str = "gpt-4o-mini"):
         """Count tokens of text"""
         encoding = tiktoken.encoding_for_model(model)
         tokens = encoding.encode(text)
         return len(tokens)
 
-    @ staticmethod
+    @staticmethod
     def _chatmessages_to_json(messages: List[ChatMessage]):
         """Convert langchain message format to JSON compatible with APIs
         This is needed, because of the non-langchain implementation of generate()
@@ -656,8 +657,7 @@ class Generator:
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -687,8 +687,8 @@ class Generator:
                                             "model": model,
                                             "options": options,
                                             "session": session,
-                                            "timestamp": timestamp
-                                        }
+                                            "timestamp": timestamp,
+                                        },
                                     )
                                 )
                             if chunk.choices[0].finish_reason == "stop":
@@ -710,8 +710,8 @@ class Generator:
                                     "model": model,
                                     "options": options,
                                     "session": session,
-                                    "timestamp": timestamp
-                                }
+                                    "timestamp": timestamp,
+                                },
                             )
                         )
                         yield json.dumps(
@@ -733,8 +733,7 @@ class Generator:
             translated_options, ignored_options = self.translate_options_to_openai(
                 options
             )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             def response_stream_groq():
                 messages = []
@@ -755,8 +754,8 @@ class Generator:
                                             "model": model,
                                             "options": options,
                                             "session": session,
-                                            "timestamp": timestamp
-                                        }
+                                            "timestamp": timestamp,
+                                        },
                                     )
                                 )
                             if chunk.choices[0].finish_reason == "stop":
@@ -778,8 +777,8 @@ class Generator:
                                     "model": model,
                                     "options": options,
                                     "session": session,
-                                    "timestamp": timestamp
-                                }
+                                    "timestamp": timestamp,
+                                },
                             )
                         )
                         yield json.dumps(
@@ -798,7 +797,6 @@ class Generator:
             return Response(response_stream_groq(), content_type="application/json")
 
         if service == "anthropic":
-
             pass  # TODO
 
         if service == "ollama":
@@ -808,16 +806,18 @@ class Generator:
                 for chunk in self._generate_ollama(
                     profile_name, model, api_messages, stream=stream, options=options
                 ):
-                    messages.append(ChatMessageChunk(
-                        content=chunk.message.content,
-                        role="assistant",
-                        response_metadata={
-                            "model": model,
-                            "options": options,
-                            "session": session,
-                            "timestamp": timestamp
-                        }
-                    ))
+                    messages.append(
+                        ChatMessageChunk(
+                            content=chunk.message.content,
+                            role="assistant",
+                            response_metadata={
+                                "model": model,
+                                "options": options,
+                                "session": session,
+                                "timestamp": timestamp,
+                            },
+                        )
+                    )
                     yield json.dumps({"response": chunk.message.content}) + "\n"
                 self.session_manager.add_messages(session, messages)
 
