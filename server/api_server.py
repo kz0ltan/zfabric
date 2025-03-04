@@ -529,13 +529,14 @@ class Generator:
 
     def _generate_openai(
         self,
-        _: str,
+        profile_name: str,
         model: str,
         messages: Iterable[Any],
         stream: bool = False,
         **kwargs,
     ):
-        response = openai.chat.completions.create(
+        client = self._get_client(profile_name)
+        response = client.chat.completions.create(
             model=model,
             messages=messages,
             stream=stream,
@@ -545,7 +546,7 @@ class Generator:
         if stream:
             yield from response
         else:
-            return response
+            yield response
 
     def _generate_azure_openai(
         self,
@@ -555,7 +556,8 @@ class Generator:
         stream: bool = False,
         **kwargs,
     ):
-        response = self._get_client(profile_name).chat.completions.create(
+        client = self._get_client(profile_name)
+        response = client.chat.completions.create(
             model=model,
             messages=messages,
             stream=stream,
@@ -719,6 +721,7 @@ class Generator:
                 generate = self._generate_azure_openai
 
             def response_stream_openai():
+                messages = []
                 for chunk in generate(
                     profile_name,
                     model,
@@ -726,9 +729,9 @@ class Generator:
                     stream=stream,
                     **translated_options,
                 ):
-                    messages = []
                     if stream:
                         ret = {}
+                        print(chunk)
                         if len(chunk.choices):
                             if chunk.choices[0].delta.content is not None:
                                 txt = chunk.choices[0].delta.content
@@ -800,19 +803,20 @@ class Generator:
                         if len(chunk.choices):
                             if chunk.choices[0].delta.content is not None:
                                 txt = chunk.choices[0].delta.content
-                                ret["response"] = txt
-                                messages.append(
-                                    ChatMessageChunk(
-                                        content=txt,
-                                        role="assistant",
-                                        response_metadata={
-                                            "model": model,
-                                            "options": options,
-                                            "session": session,
-                                            "timestamp": timestamp,
-                                        },
+                                if len(txt):
+                                    ret["response"] = txt
+                                    messages.append(
+                                        ChatMessageChunk(
+                                            content=txt,
+                                            role="assistant",
+                                            response_metadata={
+                                                "model": model,
+                                                "options": options,
+                                                "session": session,
+                                                "timestamp": timestamp,
+                                            },
+                                        )
                                     )
-                                )
                             if chunk.choices[0].finish_reason == "stop":
                                 ret["last_chunk"] = True
                         if chunk.choices[0].finish_reason:
@@ -840,9 +844,9 @@ class Generator:
                             {
                                 "response": txt,
                                 "usage": {
-                                    "prompt_tokens": chunk.x_groq.usage.prompt_tokens,
-                                    "completion_tokens": chunk.x_groq.usage.completion_tokens,
-                                    "total_tokens": chunk.x_groq.usage.total_tokens,
+                                    "prompt_tokens": chunk.usage.prompt_tokens,
+                                    "completion_tokens": chunk.usage.completion_tokens,
+                                    "total_tokens": chunk.usage.total_tokens,
                                 },
                                 "ignored_options": ",".join(ignored_options),
                             }

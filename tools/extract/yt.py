@@ -88,6 +88,7 @@ def main_function(url, options, return_only=False):
         duration_iso = video_response["items"][0]["contentDetails"]["duration"]
         duration_seconds = isodate.parse_duration(duration_iso).total_seconds()
         duration_minutes = round(duration_seconds / 60)
+
         # Set up metadata
         metadata = {}
         metadata['id'] = video_response['items'][0]['id']
@@ -111,28 +112,30 @@ def main_function(url, options, return_only=False):
         if options.comments:
             comments = get_comments(youtube, video_id)
 
+        output = {}
+        if options.duration:
+            output["duration"] = duration_minutes
+        if options.transcript:
+            output["transcript"] = transcript_text
+        if options.comments:
+            output["comments"] = comments
+        if options.metadata:
+            output["metadata"] = metadata
+
+        if return_only:
+            return output
+
         # Output based on options
         if options.duration:
-            print(duration_minutes)
+            print(output["duration"])
         elif options.transcript:
-            print(transcript_text.encode('utf-8').decode('unicode-escape'))
+            print(output["transcript"].encode(
+                'utf-8').decode('unicode-escape'))
         elif options.comments:
-            print(json.dumps(comments, indent=2))
+            print(json.dumps(output["comments"], indent=2))
         elif options.metadata:
-            print(json.dumps(metadata, indent=2))
-        else:
-            # Create JSON object with all data
-            output = {
-                "transcript": transcript_text,
-                "duration": duration_minutes,
-                "comments": comments,
-                "metadata": metadata,
-            }
-            if return_only:
-                return output
-            else:
-                # Print JSON object
-                print(json.dumps(output, indent=2))
+            print(json.dumps(output["metadata"], indent=2))
+
     except HttpError as e:
         print(
             f"Error: Failed to access YouTube API. Please check your YOUTUBE_API_KEY and ensure it is valid: {e}")

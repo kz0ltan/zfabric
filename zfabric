@@ -123,6 +123,7 @@ def coalesce_input(data: Dict[str, str]):
         else:
             data["input"] += "\n\n" + data["yt_input"]
         del data["yt_input"]
+
     if "web_input" in data:
         if len(data["input"]) == 0:
             data["input"] = data["web_input"]
@@ -238,8 +239,8 @@ def print_response(
                 response_text += response_json["response"]
                 print(response_json["response"], end="", flush=True)
             print_error(response_json)
-        print_usage(usage, response_json)
         print("\n", end="", flush=True)
+        print_usage(usage, response_json)
     else:
         response_json = response.json()
         if "response" in response_json:
@@ -375,10 +376,19 @@ def query_server(
 
 
 def get_yt_options(args: argparse.Namespace):
+    """ Return a dict with options for yt.py
+    Enabled transcripts if everything else is off
+    """
+
+    # enbale transcripts if everything else is off
+    transcripts = args.yt_transcripts
+    if not (args.yt_metadata or args.yt_comments or args.yt_transcripts):
+        transcripts = True
+
     return {
         "metadata": args.yt_metadata,
         "comments": args.yt_comments,
-        "transcripts": args.yt_transcripts,
+        "transcripts": transcripts,
     }
 
 
@@ -424,7 +434,7 @@ if __name__ == "__main__":
         "--tokens",
         default=False,
         action="store_true",
-        help="Count tokens in input and exit",
+        help="Count tokens in input (using OpenAI's tiktoken), and exit",
     )
 
     parser.add_argument(
@@ -456,8 +466,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--yt-transcripts",
-        default=True,
-        action="store_false",
+        default=False,
+        action="store_true",
         help="Download video transcript (default)",
     )
     parser.add_argument(
@@ -559,7 +569,10 @@ if __name__ == "__main__":
     load_dotenv(os.path.expanduser(ENV_PATH))
 
     data = read_input(
-        cli_args.ifile, cli_args.yt, get_yt_options(cli_args), cli_args.url
+        cli_args.ifile,
+        cli_args.yt,
+        get_yt_options(cli_args),
+        cli_args.url
     )
     data = coalesce_input(data)
 
