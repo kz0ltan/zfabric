@@ -212,6 +212,9 @@ class FabricAPIServer:
                 return jsonify({"error": "Missing input parameter"}), 400
 
             input_data = data["input"]
+            input_attachment = None
+            if "attachment" in data:
+                input_attachment = data["attachment"]
 
             messages = []
             new_messages = []
@@ -250,10 +253,24 @@ class FabricAPIServer:
                 )
                 new_messages.append(system_message)
 
+            content = [
+                {
+                    "type": "text",
+                    "text": (user_prompt + "\n")
+                            if len(user_prompt) > 0 else "" + input_data
+                }
+            ]
+            if input_attachment:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{input_attachment}"
+                        },
+                    }
+                )
             user_message = ChatMessage(
-                content=(user_prompt + "\n")
-                if len(user_prompt) > 0
-                else "" + input_data,
+                content=content,
                 role="user",
                 response_metadata={
                     "options": options,
@@ -673,6 +690,9 @@ class Generator:
         """Convert langchain message format to JSON compatible with APIs
         This is needed, because of the non-langchain implementation of generate()
         """
+        # TODO: Ollama does not like the new format with attachments, it will need a custom format :/
+        # https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-completion
+        # https://platform.openai.com/docs/guides/vision#uploading-base64-encoded-images
         return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     def generate(
@@ -731,7 +751,6 @@ class Generator:
                 ):
                     if stream:
                         ret = {}
-                        print(chunk)
                         if len(chunk.choices):
                             if chunk.choices[0].delta.content is not None:
                                 txt = chunk.choices[0].delta.content

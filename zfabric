@@ -3,6 +3,7 @@
 """zFabric client"""
 
 import argparse
+import base64
 import json
 import os
 import select
@@ -16,6 +17,7 @@ import requests
 
 from tools.extract import yt
 from tools.extract import web
+from server.helpers import load_file
 
 ENV_PATH = "~/.config/zfabric/.env"
 # BASE_URL="http://websrv4.kzoltan.srv:13337"
@@ -93,6 +95,7 @@ def read_input(
     yt_url: Optional[str] = None,
     yt_options: Optional[Dict[str, bool]] = None,
     web_url: Optional[str] = None,
+    attachment: Optional[str] = None,
 ) -> Dict[str, str]:
     """Read input from file/stdin or other sources"""
     if yt_options is None:
@@ -112,6 +115,10 @@ def read_input(
     if web_url:
         web_data = get_web_data(web_url)
         input_data["web_input"] = json.dumps(web_data)
+
+    if attachment:
+        input_data["attachment"] = base64.b64encode(
+            load_file(attachment, type='rb')).decode('ascii')
 
     return input_data
 
@@ -456,8 +463,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Start chat session",
     )
-    # parser.add_argument('-a', '--attachment', type=file_exists, default=None,
-    #        help="File attachment path or URL")
+    parser.add_argument(
+        '-a',
+        '--attachment',
+        type=file_exists,
+        default=None,
+        help="Path of file attachment (for binary files, like images)"
+    )
     parser.add_argument(
         "--yt",
         type=str,
@@ -572,7 +584,8 @@ if __name__ == "__main__":
         cli_args.ifile,
         cli_args.yt,
         get_yt_options(cli_args),
-        cli_args.url
+        cli_args.url,
+        cli_args.attachment,
     )
     data = coalesce_input(data)
 

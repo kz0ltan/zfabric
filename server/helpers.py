@@ -4,11 +4,11 @@ import os
 import random
 
 
-def load_file(path, default=None):
+def load_file(path, default=None, type: str = 'r'):
     """Load a file or: raise an exception/return default"""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+        with open(path, type, encoding="utf-8" if type == 'r' else None) as fp:
+            return fp.read()
     except FileNotFoundError as e:
         if default is None:
             raise e
