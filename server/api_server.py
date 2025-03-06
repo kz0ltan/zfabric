@@ -235,10 +235,8 @@ class FabricAPIServer:
                 system_prompt = load_file(pattern_path / "system.md", "")
                 user_prompt = load_file(pattern_path / "user.md", "")
 
-                system_prompt = self.variable_handler.resolve(
-                    system_prompt, variables)
-                user_prompt = self.variable_handler.resolve(
-                    user_prompt, variables)
+                system_prompt = self.variable_handler.resolve(system_prompt, variables)
+                user_prompt = self.variable_handler.resolve(user_prompt, variables)
 
                 # Build the API call
                 # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -257,7 +255,8 @@ class FabricAPIServer:
                 {
                     "type": "text",
                     "text": (user_prompt + "\n")
-                            if len(user_prompt) > 0 else "" + input_data
+                    if len(user_prompt) > 0
+                    else "" + input_data,
                 }
             ]
             if input_attachment:
@@ -280,8 +279,7 @@ class FabricAPIServer:
             )
             new_messages.append(user_message)
             messages += new_messages
-            self.session_manager.add_messages(
-                session, new_messages, merge=False)
+            self.session_manager.add_messages(session, new_messages, merge=False)
 
             try:
                 return self.generator.generate(
@@ -385,8 +383,7 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(
-                distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -405,9 +402,7 @@ class SessionManager:
             stmt = delete(self.table)
 
             if sess_id != "all":
-                stmt = stmt.where(
-                    self.table.c[self.session_id_field_name] == sess_id
-                )
+                stmt = stmt.where(self.table.c[self.session_id_field_name] == sess_id)
             result = session.execute(stmt)
             session.commit()
 
@@ -462,8 +457,7 @@ class Generator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get(
-                "profiles", {}).get("default_profile", None)
+            profile_name = self.config.get("profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -471,8 +465,7 @@ class Generator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode(
-            "utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -531,8 +524,7 @@ class Generator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(
-                profile)
+            self._clients[profile_name] = self._get_azure_openai_client(profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
@@ -695,6 +687,26 @@ class Generator:
         # https://platform.openai.com/docs/guides/vision#uploading-base64-encoded-images
         return [{"role": msg.role, "content": msg.content} for msg in messages]
 
+    @staticmethod
+    def _get_images_from_chatmessages(messages: List[Dict[str, Any]]):
+        """Moves images out of the message list, so they can be fed to Ollama API"""
+        for message in messages:
+            if isinstance(message["content"], list):
+                idx = 0
+                txt = ""
+                while idx < len(message["content"]):
+                    if message["content"][idx]["type"] == "image_url":
+                        if "images" not in message:
+                            message["images"] = []
+                        img = message["content"].pop(idx)
+                        message["images"].append(img["image_url"]["url"])
+                    elif message["content"][idx]["type"] == "text":
+                        txt += message["content"].pop(idx)["text"]
+                    else:
+                        idx += 1
+                message["content"] = txt
+        return messages
+
     def generate(
         self,
         profile_name: str,
@@ -729,11 +741,8 @@ class Generator:
         timestamp = datetime.datetime.now().timestamp()
 
         if service in ("openai", "azure_openai"):
-            translated_options, ignored_options = self.translate_options(
-                options
-            )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -806,16 +815,17 @@ class Generator:
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "groq":
-            translated_options, ignored_options = self.translate_options(
-                options
-            )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             def response_stream_groq():
                 messages = []
                 for chunk in self._generate_groq(
-                    profile_name, model, api_messages, stream=stream, options=translated_options
+                    profile_name,
+                    model,
+                    api_messages,
+                    stream=stream,
+                    options=translated_options,
                 ):
                     if stream:
                         ret = {}
@@ -878,8 +888,7 @@ class Generator:
             translated_options, ignored_options = self.translate_options(
                 options, flavor="anthropic"
             )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            self.logger.debug("Ignored options in the request: %s", ignored_options)
 
             def response_stream_anthropic():
                 messages = []
@@ -889,7 +898,11 @@ class Generator:
                     ret = {"response": ""}
                     usage = {}
                     for chunk in self._generate_anthropic(
-                        profile_name, model, api_messages, stream=stream, options=options
+                        profile_name,
+                        model,
+                        api_messages,
+                        stream=stream,
+                        options=options,
                     ):
                         if chunk.type == "content_block_delta":
                             ret["response"] = chunk.delta.text
@@ -907,14 +920,14 @@ class Generator:
                             )
 
                         elif chunk.type == "message_start":
-                            usage["cache_creation_input_tokens"] = \
+                            usage["cache_creation_input_tokens"] = (
                                 chunk.message.usage.cache_creation_input_tokens
-                            usage["cache_read_input_tokens"] = \
+                            )
+                            usage["cache_read_input_tokens"] = (
                                 chunk.message.usage.cache_read_input_tokens
-                            usage["input_tokens"] = \
-                                chunk.message.usage.input_tokens
-                            usage["output_tokens"] = \
-                                chunk.message.usage.output_tokens
+                            )
+                            usage["input_tokens"] = chunk.message.usage.input_tokens
+                            usage["output_tokens"] = chunk.message.usage.output_tokens
 
                         elif chunk.type == "message_delta":
                             usage["output_tokens"] += chunk.usage.output_tokens
@@ -929,7 +942,11 @@ class Generator:
                 else:
                     ret = {"response": "", "usage": {}}
                     for chunk in self._generate_anthropic(
-                        profile_name, model, api_messages, stream=stream, options=options
+                        profile_name,
+                        model,
+                        api_messages,
+                        stream=stream,
+                        options=options,
                     ):
                         if chunk.type == "content_block_delta":
                             ret["response"] += chunk.delta.text
@@ -946,14 +963,18 @@ class Generator:
                                 )
                             )
                         if chunk.type == "message_start":
-                            ret["usage"]["cache_creation_input_tokens"] = \
+                            ret["usage"]["cache_creation_input_tokens"] = (
                                 chunk.message.usage.cache_creation_input_tokens
-                            ret["usage"]["cache_read_input_tokens"] = \
+                            )
+                            ret["usage"]["cache_read_input_tokens"] = (
                                 chunk.message.usage.cache_read_input_tokens
-                            ret["usage"]["input_tokens"] = \
+                            )
+                            ret["usage"]["input_tokens"] = (
                                 chunk.message.usage.input_tokens
-                            ret["usage"]["output_tokens"] = \
+                            )
+                            ret["usage"]["output_tokens"] = (
                                 chunk.message.usage.output_tokens
+                            )
                         if chunk.type == "message_delta":
                             ret["usage"]["output_tokens"] += chunk.usage.output_tokens
 
@@ -961,14 +982,22 @@ class Generator:
 
                 self.session_manager.add_messages(session, messages)
 
-            return Response(response_stream_anthropic(), content_type="application/json")
+            return Response(
+                response_stream_anthropic(), content_type="application/json"
+            )
 
         if service == "ollama":
+            api_messages = self._get_images_from_chatmessages(api_messages)
+            breakpoint()
 
             def response_stream_ollama():
                 messages = []
                 for chunk in self._generate_ollama(
-                    profile_name, model, api_messages, stream=stream, options=options
+                    profile_name,
+                    model,
+                    api_messages,
+                    stream=stream,
+                    options=options,
                 ):
                     messages.append(
                         ChatMessageChunk(
