@@ -235,8 +235,10 @@ class FabricAPIServer:
                 system_prompt = load_file(pattern_path / "system.md", "")
                 user_prompt = load_file(pattern_path / "user.md", "")
 
-                system_prompt = self.variable_handler.resolve(system_prompt, variables)
-                user_prompt = self.variable_handler.resolve(user_prompt, variables)
+                system_prompt = self.variable_handler.resolve(
+                    system_prompt, variables)
+                user_prompt = self.variable_handler.resolve(
+                    user_prompt, variables)
 
                 # Build the API call
                 # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -279,7 +281,8 @@ class FabricAPIServer:
             )
             new_messages.append(user_message)
             messages += new_messages
-            self.session_manager.add_messages(session, new_messages, merge=False)
+            self.session_manager.add_messages(
+                session, new_messages, merge=False)
 
             try:
                 return self.generator.generate(
@@ -383,7 +386,8 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(
+                distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -402,7 +406,8 @@ class SessionManager:
             stmt = delete(self.table)
 
             if sess_id != "all":
-                stmt = stmt.where(self.table.c[self.session_id_field_name] == sess_id)
+                stmt = stmt.where(
+                    self.table.c[self.session_id_field_name] == sess_id)
             result = session.execute(stmt)
             session.commit()
 
@@ -457,7 +462,8 @@ class Generator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -465,7 +471,8 @@ class Generator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        token = b64encode(f"{username}:{password}".encode(
+            "utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -524,7 +531,8 @@ class Generator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
@@ -616,7 +624,7 @@ class Generator:
             messages.pop(0)
 
         response = client.messages.create(
-            model=model, messages=messages, system=system, stream=True, **options
+            model=model, messages=messages, system=system, stream=stream, **options
         )
 
         yield from response
@@ -699,7 +707,8 @@ class Generator:
                         if "images" not in message:
                             message["images"] = []
                         img = message["content"].pop(idx)
-                        message["images"].append(img["image_url"]["url"])
+                        i = img["image_url"]["url"][23:]
+                        message["images"].append(i)
                     elif message["content"][idx]["type"] == "text":
                         txt += message["content"].pop(idx)["text"]
                     else:
@@ -741,8 +750,10 @@ class Generator:
         timestamp = datetime.datetime.now().timestamp()
 
         if service in ("openai", "azure_openai"):
-            translated_options, ignored_options = self.translate_options(options)
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(
+                options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -815,8 +826,10 @@ class Generator:
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "groq":
-            translated_options, ignored_options = self.translate_options(options)
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(
+                options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_groq():
                 messages = []
@@ -888,7 +901,8 @@ class Generator:
             translated_options, ignored_options = self.translate_options(
                 options, flavor="anthropic"
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_anthropic():
                 messages = []
@@ -988,7 +1002,6 @@ class Generator:
 
         if service == "ollama":
             api_messages = self._get_images_from_chatmessages(api_messages)
-            breakpoint()
 
             def response_stream_ollama():
                 messages = []
