@@ -27,7 +27,7 @@ Copy config.json example::
 
 Edit config.json as you wish, for example add a random token for your user, add API key(s), etc.
 
-To run the server on [Mac OS as a service](https://gist.github.com/johndturn/09a5c055e6a56ab61212204607940fa0#further-reading)::
+To run the server on [Mac OS as a service](https://gist.github.com/johndturn/09a5c055e6a56ab61212204607940fa0#further-reading):
 
     cp server/examples/hu.kzoltan.zFabric ~/Library/LaunchAgents/
     ...edit service file
@@ -60,4 +60,4 @@ Delete the repository, and the client config file from ~/.config/zFabric/.env
 
 To run the local server::
 
-    ./api_server -l 0.0.0.0 -d
+    ./app.py -d
