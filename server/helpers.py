@@ -38,22 +38,3 @@ def ensure_directories_exist(path: str) -> None:
         print(f"Created directories: {abs_path}")
     else:
         print(f"Directories already exist: {abs_path}")
-
-
-class CustomAction(argparse.Action):
-    """Custom action for ArgParse:
-    1. If the flag was specified without a value, set the default value
-    1. If the flag was not specified at all, set to None
-    1. If the flag was specified with a value, use that value
-    """
-
-    def __call__(self, cparser, namespace, values, option_string=None):
-        if self.default is not None and values is None:
-            # If the flag was specified without a value, set the default value
-            setattr(namespace, self.dest, self.default)
-        elif values is None:
-            # If the flag was not specified at all, set to None
-            setattr(namespace, self.dest, None)
-        else:
-            # If the flag was specified with a value, use that value
-            setattr(namespace, self.dest, values)

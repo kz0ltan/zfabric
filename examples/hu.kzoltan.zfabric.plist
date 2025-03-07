@@ -15,7 +15,7 @@
             <string>1</string>
             <string>-b</string>
             <string>127.0.0.1:13337</string>
-            <string>api_server:start()</string>
+            <string>app:start()</string>
         </array>
 
         <key>WorkingDirectory</key>
