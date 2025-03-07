@@ -1,13 +1,14 @@
 """Helper functions for zfabric"""
 
+import argparse
 import os
 import random
 
 
-def load_file(path, default=None, type: str = 'r'):
+def load_file(path, default=None, type: str = "r"):
     """Load a file or: raise an exception/return default"""
     try:
-        with open(path, type, encoding="utf-8" if type == 'r' else None) as fp:
+        with open(path, type, encoding="utf-8" if type == "r" else None) as fp:
             return fp.read()
     except FileNotFoundError as e:
         if default is None:
@@ -37,3 +38,22 @@ def ensure_directories_exist(path: str) -> None:
         print(f"Created directories: {abs_path}")
     else:
         print(f"Directories already exist: {abs_path}")
+
+
+class CustomAction(argparse.Action):
+    """Custom action for ArgParse:
+    1. If the flag was specified without a value, set the default value
+    1. If the flag was not specified at all, set to None
+    1. If the flag was specified with a value, use that value
+    """
+
+    def __call__(self, cparser, namespace, values, option_string=None):
+        if self.default is not None and values is None:
+            # If the flag was specified without a value, set the default value
+            setattr(namespace, self.dest, self.default)
+        elif values is None:
+            # If the flag was not specified at all, set to None
+            setattr(namespace, self.dest, None)
+        else:
+            # If the flag was specified with a value, use that value
+            setattr(namespace, self.dest, values)
