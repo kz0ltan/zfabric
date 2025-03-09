@@ -131,8 +131,10 @@ def register_routes(server):
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = server.variable_handler.resolve(system_prompt, variables)
-            user_prompt = server.variable_handler.resolve(user_prompt, variables)
+            system_prompt = server.variable_handler.resolve(
+                system_prompt, variables)
+            user_prompt = server.variable_handler.resolve(
+                user_prompt, variables)
 
             # Build the API call
             # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -185,7 +187,8 @@ def register_routes(server):
                 session=session,
             )
         except Exception as ex:
-            server.logger.error("Error occured: %s", ex)
+            server.app.logger.error("Error occured: %s", ex)
+            raise ex
             return jsonify(
                 {"error": "An error occurred while processing the request."}
             ), 500

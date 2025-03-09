@@ -1,4 +1,4 @@
-from base64 import b64encode
+import base64
 import datetime
 import json
 import logging
@@ -37,7 +37,8 @@ class Generator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -45,7 +46,8 @@ class Generator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        token = base64.b64encode(f"{username}:{password}".encode(
+            "utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -104,7 +106,8 @@ class Generator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
@@ -263,14 +266,14 @@ class Generator:
         """Convert langchain message format to JSON compatible with APIs
         This is needed, because of the non-langchain implementation of generate()
         """
-        # TODO: Ollama does not like the new format with attachments, it will need a custom format :/
-        # https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-completion
-        # https://platform.openai.com/docs/guides/vision#uploading-base64-encoded-images
         return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     @staticmethod
-    def _get_images_from_chatmessages(messages: List[Dict[str, Any]]):
-        """Moves images (based64 encoded) out of the message list, so they can be fed to Ollama API"""
+    def _ollama_image_transformation(messages: List[Dict[str, Any]]):
+        """
+        Moves images (based64 encoded) out of the message list,
+        so they can be fed to Ollama API
+        """
         for message in messages:
             if isinstance(message["content"], list):
                 idx = 0
@@ -287,6 +290,44 @@ class Generator:
                     else:
                         idx += 1
                 message["content"] = txt
+        return messages
+
+    @staticmethod
+    def _groq_image_transformation(messages: List[Dict[str, Any]]):
+        """
+        Moves system message to the first user message, as Groq does not
+        support system messages with images
+        """
+        for message in messages:
+            if isinstance(message["content"], list):
+                if any(msg["type"] == "image_url" for msg in message["content"]):
+                    if messages[0]["role"] == "system":
+                        if messages[1]["role"] == "user":
+                            messages[1]["content"].insert(0, {
+                                "type": "text",
+                                "text": messages[0]["content"]
+                            })
+                            messages.pop(0)
+
+        return messages
+
+    @staticmethod
+    def _anthropic_image_transformation(messages: List[Dict[str, Any]]):
+        """
+
+        """
+        for message in messages:
+            if isinstance(message["content"], list):
+                for msg in message["content"]:
+                    if msg["type"] == "image_url":
+                        msg["type"] = "image"
+                        msg["source"] = {"type": "base64"}
+                        data = base64.b64decode(msg["image_url"]["url"][23:])
+                        del msg["image_url"]
+                        msg["source"]["data"] = base64.standard_b64encode(
+                            data).decode("utf-8")
+                        msg["source"]["media_type"] = "image/jpeg"
+
         return messages
 
     def generate(
@@ -323,8 +364,10 @@ class Generator:
         timestamp = datetime.datetime.now().timestamp()
 
         if service in ("openai", "azure_openai"):
-            translated_options, ignored_options = self.translate_options(options)
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(
+                options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -397,8 +440,11 @@ class Generator:
             return Response(response_stream_openai(), content_type="application/json")
 
         if service == "groq":
-            translated_options, ignored_options = self.translate_options(options)
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            api_messages = self._groq_image_transformation(api_messages)
+            translated_options, ignored_options = self.translate_options(
+                options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_groq():
                 messages = []
@@ -467,10 +513,12 @@ class Generator:
             return Response(response_stream_groq(), content_type="application/json")
 
         if service == "anthropic":
+            api_messages = self._anthropic_image_transformation(api_messages)
             translated_options, ignored_options = self.translate_options(
                 options, flavor="anthropic"
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_anthropic():
                 messages = []
@@ -569,7 +617,7 @@ class Generator:
             )
 
         if service == "ollama":
-            api_messages = self._get_images_from_chatmessages(api_messages)
+            api_messages = self._ollama_image_transformation(api_messages)
 
             def response_stream_ollama():
                 messages = []
