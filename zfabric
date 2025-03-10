@@ -81,7 +81,12 @@ def get_yt_data(
             "lang": "en",
         },
     )()
-    return yt.main_function(yt_url, options, return_only=True)
+    ret = yt.main_function(yt_url, options, return_only=True)
+
+    if ret:
+        return ret
+
+    raise ValueError("No data received from Youtube")
 
 
 def get_web_data(web_url: str):
