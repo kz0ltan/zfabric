@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Optional
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response
 
 from server.routes import register_routes
 from server.models import SessionManager, VariableHandler
@@ -42,7 +42,7 @@ class FabricAPIServer:
         """Register Flask error handlers"""
 
         @self.app.errorhandler(404)
-        def not_found():
+        def not_found(exception):
             return jsonify({"error": "The requested resource was not found."}), 404
 
         @self.app.errorhandler(500)
@@ -52,3 +52,13 @@ class FabricAPIServer:
             """
             self.app.logger.error("Error occured: %s", exception)
             return jsonify({"error": "An internal server error occurred."}), 500
+
+        @self.app.errorhandler(Exception)
+        def handle_exception(exception):
+            self.app.logger.error("Error occured: %s", exception)
+            # raise ex
+
+            def generate_error():
+                yield json.dumps({"error": "An error occurred while processing the request"})
+
+            return Response(generate_error(), mimetype="application/json")
