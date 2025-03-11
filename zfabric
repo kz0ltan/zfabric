@@ -22,6 +22,7 @@ from server.helpers import load_file
 ENV_PATH = "~/.config/zfabric/.env"
 # BASE_URL="http://websrv4.kzoltan.srv:13337"
 BASE_URL = "http://localhost:13337"
+TIMEOUT = 60
 
 # ANSI Escape Codes
 BOLD_START = "\033[1m"
@@ -202,15 +203,15 @@ def send_query(
             json=post_data,
             stream=params["stream"],
             params=params,
-            timeout=30,
+            timeout=TIMEOUT,
         )
     elif method == "GET":
         query_response = requests.get(
-            generation_url, headers=headers, params=params, timeout=30
+            generation_url, headers=headers, params=params, timeout=TIMEOUT
         )
     elif method == "DELETE":
         query_response = requests.delete(
-            generation_url, headers=headers, params=params, timeout=30
+            generation_url, headers=headers, params=params, timeout=TIMEOUT
         )
 
     return query_response
@@ -377,6 +378,7 @@ def query_server(
         "variables": qparams.get("variable", args.variable),
         "model": qparams.get("model", args.model),
         "options": qparams.get("options", json.dumps(set_options(args))),
+        "keep_alive": qparams.get("keep_alive", args.keepalive),
         "stream": qparams.get("stream", not args.no_stream),
         "session": qparams.get("session", args.session),
     }
@@ -574,6 +576,12 @@ if __name__ == "__main__":
         help="Positive values penalize new tokens based on whether they "
         "appear in the text so far, increasing the model's likelihood to talk "
         "about new topics.",
+    )
+    parser.add_argument(
+        "--keepalive",
+        default=None,
+        type=str,
+        help="How long to keep loaded model in memory (Ollama only), for example '5m' or '1h' or '3600' (seconds)",
     )
     parser.add_argument(
         "-s",

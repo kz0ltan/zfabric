@@ -2,7 +2,7 @@ import base64
 import datetime
 import json
 import logging
-from typing import Optional, Dict, List, Any, Iterable
+from typing import Optional, Dict, List, Any, Iterable, Union
 
 from anthropic import Anthropic
 from flask.logging import default_handler
@@ -25,7 +25,7 @@ class Generator:
 
         self.logger = logging.getLogger("app.generator")
         self.logger.addHandler(default_handler)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(self.config.get("loglevel", logging.INFO))
 
         self._clients: Dict[str, Any] = {}
 
@@ -210,13 +210,19 @@ class Generator:
         messages=List[Dict],
         stream: bool = False,
         options: Optional[Dict[str, Any]] = None,
+        keep_alive: Optional[Union[float, str]] = None,
     ):
+        self.logger.debug(
+            f"Ollama client.chat(model={model}, messages=..., "
+            + f"options={options}, stream={stream}, keep_alive={keep_alive})"
+        )
         client = self._get_client(profile_name)
         response = client.chat(
             model=model,
             messages=messages,
             options=options,
             stream=stream,
+            keep_alive=keep_alive,
         )
         if stream:
             yield from response
@@ -333,6 +339,7 @@ class Generator:
         messages: List[ChatMessage],
         options: Dict[str, Any],
         stream: bool,
+        keep_alive: Optional[Union[float, str]] = None,
         model: Optional[str] = None,
         session: Optional[str] = None,
     ):
@@ -619,6 +626,7 @@ class Generator:
                     api_messages,
                     stream=stream,
                     options=options,
+                    keep_alive=keep_alive,
                 ):
                     messages.append(
                         ChatMessageChunk(

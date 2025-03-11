@@ -87,6 +87,7 @@ def register_routes(server):
             default=False,
             type=(lambda s: s.lower() in ("True", "true", "1")),
         )
+        keep_alive = request.args.get("keep_alive", default=None)
         session = request.args.get(
             "session",
             default=datetime.datetime.today().strftime("%Y-%m-%d-")
@@ -131,10 +132,8 @@ def register_routes(server):
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = server.variable_handler.resolve(
-                system_prompt, variables)
-            user_prompt = server.variable_handler.resolve(
-                user_prompt, variables)
+            system_prompt = server.variable_handler.resolve(system_prompt, variables)
+            user_prompt = server.variable_handler.resolve(user_prompt, variables)
 
             # Build the API call
             # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -183,6 +182,7 @@ def register_routes(server):
                 messages,
                 options,
                 stream,
+                keep_alive=keep_alive,
                 model=model,
                 session=session,
             )

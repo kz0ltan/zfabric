@@ -34,9 +34,11 @@ class SessionManager:
         self.metadata = None
         self.table = None
 
+        self.config = config
+
         self.logger = logging.getLogger("app.variables")
         self.logger.addHandler(default_handler)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(self.config.get("loglevel", logging.INFO))
 
     @property
     def db_connection(self):
@@ -143,7 +145,7 @@ class VariableHandler:
 
         self.logger = logging.getLogger("app.variables")
         self.logger.addHandler(default_handler)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(self.config.get("loglevel", logging.INFO))
 
     def resolve(self, template, variables: Dict):
         """Replace variables in template (text)"""

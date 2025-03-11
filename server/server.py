@@ -22,7 +22,7 @@ class FabricAPIServer:
         self.config = json.loads(load_file(config_path))
 
         self.app = Flask(name)
-        self.app.logger.setLevel(logging.INFO)
+        self.app.logger.setLevel(self.config.get("loglevel", logging.INFO))
         register_routes(self)
         self.add_errorhandlers()
 
