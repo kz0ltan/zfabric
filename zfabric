@@ -315,14 +315,26 @@ def print_chat(
     output = ""
     for msg in response_list:
         role = msg["data"]["role"]
-        content = msg["data"]["content"].strip()
+        image_content = False
+        if not isinstance(msg["data"]["content"], list):
+            content = msg["data"]["content"].strip()
+        else:
+            content = ""
+            for m in msg["data"]["content"]:
+                if m["type"] == "text":
+                    content += m["text"]
+                elif m["type"] == "image_url":
+                    image_content = True
         if role == "assistant":
             metadata = msg["data"]["response_metadata"]
             # timestamp = metadata["timestamp"]
             model = metadata["model"]
             output += f"{BOLD_START}{role.title()} ({model}){BOLD_END}: {content}"
         else:
-            output += f"{BOLD_START}{role.title()}{BOLD_END}: {content}"
+            output += (
+                f"{BOLD_START}{role.title()}"
+                + f"{BOLD_END}{' (image_attachment)' if image_content else ''}: {content}"
+            )
         if msg != response_list[-1]:
             output += "\n"
     print_str(output, ccopy=ccopy, ofile=ofile)
