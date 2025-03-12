@@ -3,7 +3,7 @@
 import argparse
 import json
 import os
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Iterable
 
 from dotenv import load_dotenv
 import requests
@@ -36,7 +36,7 @@ class ConfluenceClient:
             self._auth = HTTPBasicAuth(self.user, self.token)
         return self._auth
 
-    def _send_request(self, url):
+    def _send_request(self, url) -> requests.models.Response:
         headers = {"Accept": "application/json"}
         return requests.request("GET", url, headers=headers, auth=self.auth, timeout=30)
 
@@ -98,17 +98,44 @@ class ConfluenceClient:
         response = self._send_request(url)
         return response.json()
 
+    def get_child_pages_by_id(self, page_id: int) -> Dict:
+        """Get child pages based on page_id"""
+        url = self.instance_url + f"/wiki/api/v2/pages/{page_id}/children"
+        response = self._send_request(url)
+        return [{child["id"]: child["title"]} for child in response.json()["results"]]
+
+
+def print_list(input_iter: Iterable) -> None:
+    """Print a list of objects from an iterable"""
+    for i in input_iter:
+        print(i)
+
+
+def main(args: argparse.Namespace) -> None:
+    """Main function"""
+    client = ConfluenceClient()
+    if args.children:
+        children = client.get_child_pages_by_id(args.page_id)
+        print_list(children)
+    else:
+        page = client.get_page_by_id(args.page_id)
+        print(json.dumps(page, indent=2))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Simple tool to download confluence pages"
+        description="Simple tool to download information from Confluence"
     )
     parser.add_argument(
         "--page-id", required=True, type=int, help="Page ID of a confluence page"
     )
-    args = parser.parse_args()
-
+    parser.add_argument(
+        "--children",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Enumerate children of the given page-id",
+    )
+    cli_args = parser.parse_args()
     load_dotenv(os.path.expanduser(ENV_PATH))
-    client = ConfluenceClient()
-    page = client.get_page_by_id(args.page_id)
-    print(json.dumps(page, indent=2))
+    main(cli_args)
