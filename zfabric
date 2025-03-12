@@ -197,23 +197,27 @@ def send_query(
         "Authorization": "bearer " + str(os.getenv("ZF_SERVER_TOKEN")),
         "Content-Type": "Application/json",
     }
-    if method == "POST":
-        query_response = requests.post(
-            generation_url,
-            headers=headers,
-            json=post_data,
-            stream=params["stream"],
-            params=params,
-            timeout=TIMEOUT,
-        )
-    elif method == "GET":
-        query_response = requests.get(
-            generation_url, headers=headers, params=params, timeout=TIMEOUT
-        )
-    elif method == "DELETE":
-        query_response = requests.delete(
-            generation_url, headers=headers, params=params, timeout=TIMEOUT
-        )
+    try:
+        if method == "POST":
+            query_response = requests.post(
+                generation_url,
+                headers=headers,
+                json=post_data,
+                stream=params["stream"],
+                params=params,
+                timeout=TIMEOUT,
+            )
+        elif method == "GET":
+            query_response = requests.get(
+                generation_url, headers=headers, params=params, timeout=TIMEOUT
+            )
+        elif method == "DELETE":
+            query_response = requests.delete(
+                generation_url, headers=headers, params=params, timeout=TIMEOUT
+            )
+    except requests.exceptions.ConnectionError as ex:
+        print("Connection to the server failed")
+        return
 
     return query_response
 
@@ -244,6 +248,13 @@ def print_response(
     2. copy to clipboard
     """
 
+    if response is None:
+        return
+
+    if not response.ok:
+        print_error(response.json())
+        return
+
     response_text = ""
     if stream:
         response_json = {}
@@ -253,7 +264,7 @@ def print_response(
                 response_text += response_json["response"]
                 print(response_json["response"], end="", flush=True)
             print_error(response_json)
-        print("\n", end="", flush=True)
+        # print("\n", end="", flush=True)
         print_usage(usage, response_json)
     else:
         response_json = response.json()
@@ -348,8 +359,12 @@ def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None
         "session": session,
     }
     resp = send_query(url, query_params).json()
+    if resp is None:
+        return
     print_error(resp)
-    if "response" in resp:
+    if not resp.ok:
+        return
+    if resp.ok and "response" in resp:
         print_chat(
             resp["response"],
             ofile=ofile,
@@ -360,8 +375,12 @@ def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None
 def list_objects(object_name: str, ccopy: bool = False, ofile: Optional[str] = None):
     """Print objects defined by -l cli argument"""
     resp = send_query(BASE_URL + "/" + object_name).json()
+    if resp is None:
+        return
     print_error(resp)
-    if "response" in resp:
+    if not resp.ok:
+        return
+    if resp.ok and "response" in resp:
         print_list(resp["response"], ccopy=ccopy, ofile=ofile)
 
 
@@ -611,6 +630,9 @@ if __name__ == "__main__":
         cli_args.attachment,
     )
     data = coalesce_input(data)
+
+    # query_server(BASE_URL + "/atterns/" + cli_args.pattern, cli_args, data)
+    # sys.exit(0)
 
     if cli_args.list:
         if cli_args.session:

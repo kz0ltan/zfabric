@@ -4,8 +4,9 @@ import json
 import logging
 import os
 from typing import Optional
+import traceback
 
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify, request, Response
 
 from server.routes import register_routes
 from server.models import SessionManager, VariableHandler
@@ -45,20 +46,20 @@ class FabricAPIServer:
         def not_found(exception):
             return jsonify({"error": "The requested resource was not found."}), 404
 
-        @self.app.errorhandler(500)
-        def server_error(exception):
-            """Manually raise an internal server error:
-            flask.abort(500)
-            """
-            self.app.logger.error("Error occured: %s", exception)
-            return jsonify({"error": "An internal server error occurred."}), 500
-
         @self.app.errorhandler(Exception)
         def handle_exception(exception):
             self.app.logger.error("Error occured: %s", exception)
-            # raise ex
+            stack_trace = "".join(
+                traceback.format_exception(
+                    type(exception), exception, exception.__traceback__)
+            )
+            self.app.logger.debug(stack_trace)
 
-            def generate_error():
-                yield json.dumps({"error": "An error occurred while processing the request"})
-
-            return Response(generate_error(), mimetype="application/json")
+            # stream = request.args.get(
+            #    "stream", "false").lower() in ("true", "1")
+            # if stream:
+            #    def generate_error():
+            #        yield json.dumps({"error": "An error occurred while processing the request"})
+            #    return Response(generate_error(), mimetype="application/json")
+            # else:
+            return json.dumps({"error": str(exception)}), 500
