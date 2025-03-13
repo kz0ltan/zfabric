@@ -379,15 +379,14 @@ def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None
     query_params = {
         "session": session,
     }
-    resp = send_query(url, query_params).json()
+    resp = send_query(url, query_params)
     if resp is None:
         return
     print_error(resp)
-    if not resp.ok:
-        return
-    if resp.ok and "response" in resp:
+    resp_json = resp.json()
+    if resp.ok and "response" in resp_json:
         print_chat(
-            resp["response"],
+            resp_json["response"],
             ofile=ofile,
             ccopy=ccopy,
         )
@@ -395,14 +394,13 @@ def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None
 
 def list_objects(object_name: str, ccopy: bool = False, ofile: Optional[str] = None):
     """Print objects defined by -l cli argument"""
-    resp = send_query(BASE_URL + "/" + object_name).json()
+    resp = send_query(BASE_URL + "/" + object_name)
     if resp is None:
         return
     print_error(resp)
-    if not resp.ok:
-        return
-    if resp.ok and "response" in resp:
-        print_list(resp["response"], ccopy=ccopy, ofile=ofile)
+    resp_json = resp.json()
+    if resp.ok and "response" in resp_json:
+        print_list(resp_json["response"], ccopy=ccopy, ofile=ofile)
 
 
 def query_server(
