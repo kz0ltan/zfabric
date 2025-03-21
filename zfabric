@@ -283,7 +283,7 @@ def print_response(
                 response_text += response_json["response"]
                 print(response_json["response"], end="", flush=True)
             print_error(response_json)
-        # print("\n", end="", flush=True)
+        print("\n", end="", flush=True)
         print_usage(usage, response_json)
     else:
         response_json = response.json()
