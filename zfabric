@@ -33,7 +33,8 @@ BOLD_END = "\033[0m"
 def validate_key_value(arg):
     """Simple test to check if key-value pair is readable"""
     if "=" not in arg:
-        raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
+        raise argparse.ArgumentTypeError(
+            f"Argument '{arg}' is not in key=value format")
     return arg
 
 
@@ -131,9 +132,9 @@ def read_input(
         input_data["web_input"] = json.dumps(web_data)
 
     if attachment:
-        input_data["attachment"] = base64.b64encode(
-            load_file(attachment, type="rb")
-        ).decode("ascii")
+        input_data["attachment"] = base64.b64encode(load_file(attachment, type="rb")).decode(
+            "ascii"
+        )
 
     if confluence_page_id:
         input_data["confl_input"] = get_confluence_data(confluence_page_id)
@@ -296,6 +297,9 @@ def print_response(
 
     write_alternative_outputs(response_text, ccopy=ccopy, ofile=ofile)
 
+    if "session" in response_json:
+        return response_json["session"]
+
 
 def write_alternative_outputs(
     text: str, ccopy: bool = False, ofile: Optional[str] = None, force: bool = False
@@ -324,9 +328,7 @@ def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None):
     write_alternative_outputs(output, ccopy=ccopy, ofile=ofile)
 
 
-def print_list(
-    response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None
-):
+def print_list(response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None):
     """Print list of strings using print_str"""
 
     output = ""
@@ -421,8 +423,10 @@ def query_server(
     }
 
     while True:
-        resp = send_query(qry_str, query_params, post_data, method=method)
-        print_response(
+        resp = send_query(qry_str, params=query_params,
+                          post_data=post_data, method=method)
+
+        session_id = print_response(
             resp,
             ofile=args.ofile,
             ccopy=args.copy,
@@ -431,6 +435,9 @@ def query_server(
         )
         if not args.chat:
             return
+
+        # set session to the one received from server
+        query_params["session"] = session_id
 
         if not sys.stdin.isatty():
             # reopen tty as we lost that with sys.stdin.read()
@@ -501,9 +508,8 @@ if __name__ == "__main__":
         help="Count tokens in input (using OpenAI's tiktoken), and exit",
     )
 
-    parser.add_argument(
-        "-i", "--ifile", type=file_exists, default=None, help="Input file path"
-    )
+    parser.add_argument("-i", "--ifile", type=file_exists,
+                        default=None, help="Input file path")
     parser.add_argument(
         "-o", "--ofile", type=file_not_exists, default=None, help="Output file path"
     )
@@ -634,9 +640,8 @@ if __name__ == "__main__":
         help="Session name to insert/query, use 'skip' to skip saving session",
     )
 
-    parser.add_argument(
-        "-r", "--profile", help="Profile to use (defined in server config.json)"
-    )
+    parser.add_argument("-r", "--profile",
+                        help="Profile to use (defined in server config.json)")
     parser.add_argument(
         "--no-stream",
         default=False,
@@ -664,9 +669,11 @@ if __name__ == "__main__":
 
     if cli_args.list:
         if cli_args.session:
-            list_sessions(cli_args.session, ccopy=cli_args.copy, ofile=cli_args.ofile)
+            list_sessions(cli_args.session, ccopy=cli_args.copy,
+                          ofile=cli_args.ofile)
         else:
-            list_objects(cli_args.list, ccopy=cli_args.copy, ofile=cli_args.ofile)
+            list_objects(cli_args.list, ccopy=cli_args.copy,
+                         ofile=cli_args.ofile)
     elif cli_args.delete and cli_args.session:
         query_server(
             BASE_URL + "/session/" + cli_args.session,
@@ -676,9 +683,11 @@ if __name__ == "__main__":
             method="DELETE",
         )
     elif cli_args.tokens:
-        query_server(BASE_URL + "/tokens", cli_args, data, qparams={"stream": False})
+        query_server(BASE_URL + "/tokens", cli_args,
+                     data, qparams={"stream": False})
     elif cli_args.pattern:
-        query_server(BASE_URL + "/patterns/" + cli_args.pattern, cli_args, data)
+        query_server(BASE_URL + "/patterns/" +
+                     cli_args.pattern, cli_args, data)
     elif len(data["input"]) > 0 and cli_args.session:
         query_server(BASE_URL + "/session", cli_args, data)
     else:
