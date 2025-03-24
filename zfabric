@@ -284,6 +284,9 @@ def print_response(
 
     write_alternative_outputs(response_text, ccopy=ccopy, ofile=ofile)
 
+    if "session" in response_json:
+        return response_json["session"]
+
 
 def write_alternative_outputs(
     text: str, ccopy: bool = False, ofile: Optional[str] = None, force: bool = False
@@ -424,8 +427,11 @@ def query_server(
         post_data["input"] = read_cli_input()
 
     while True:
-        resp = send_query(qry_str, query_params, post_data, method=method)
-        print_response(
+        resp = send_query(
+            qry_str, params=query_params, post_data=post_data, method=method
+        )
+
+        session_id = print_response(
             resp,
             ofile=args.ofile,
             ccopy=args.copy,
@@ -435,11 +441,9 @@ def query_server(
         if not args.chat:
             return
 
-        # if not sys.stdin.isatty():
-        #    # reopen tty as we lost that with sys.stdin.read()
-        #    sys.stdin = open("/dev/tty", "r", encoding="utf-8")
-        # post_data = {}
-        # post_data["input"] = input("> ")
+        # set session to the one received from server
+        query_params["session"] = session_id
+
         post_data = {}
         post_data["input"] = read_cli_input()
 

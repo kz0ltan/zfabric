@@ -35,13 +35,9 @@ def register_routes(server):
     @server.app.route("/patterns", methods=["GET"])
     @auth_required(server)
     def list_patterns():
-        patterns = itertools.chain.from_iterable(
-            [
-                os.listdir(ppath)
-                for ppath in server.config["pattern_paths"]
-                if os.path.isdir(ppath)
-            ]
-        )
+        patterns = itertools.chain.from_iterable([
+            os.listdir(ppath) for ppath in server.config["pattern_paths"] if os.path.isdir(ppath)
+        ])
         return jsonify({"response": list(patterns)})
 
     @server.app.route("/sessions", methods=["GET"])
@@ -53,14 +49,12 @@ def register_routes(server):
     @auth_required(server)
     def get_session(session: str):
         if request.method == "GET":
-            return jsonify(
-                {
-                    "response": [
-                        message_to_dict(msg)
-                        for msg in server.session_manager.get_session(session).messages
-                    ]
-                }
-            )
+            return jsonify({
+                "response": [
+                    message_to_dict(msg)
+                    for msg in server.session_manager.get_session(session).messages
+                ]
+            })
 
         if request.method == "DELETE":
             server.session_manager.delete_session(session)
@@ -78,6 +72,9 @@ def register_routes(server):
         Raises:
             Exception: If there is an error during the API call.
         """
+
+        server.app.logger.debug(
+            "Milling request received.\n\tArguments: " + str(request.args))
 
         profile_name = request.args.get("profile", None)
         model = request.args.get("model", None)
@@ -98,8 +95,7 @@ def register_routes(server):
             session = None
 
         variables: Dict[str, Union[str, int]] = request.args.get(
-            "variables", default={}
-        )
+            "variables", default={})
 
         if options:
             options = json.loads(options)
@@ -132,8 +128,10 @@ def register_routes(server):
             system_prompt = load_file(pattern_path / "system.md", "")
             user_prompt = load_file(pattern_path / "user.md", "")
 
-            system_prompt = server.variable_handler.resolve(system_prompt, variables)
-            user_prompt = server.variable_handler.resolve(user_prompt, variables)
+            system_prompt = server.variable_handler.resolve(
+                system_prompt, variables)
+            user_prompt = server.variable_handler.resolve(
+                user_prompt, variables)
 
             # Build the API call
             # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.chat.ChatMessage.html
@@ -151,18 +149,14 @@ def register_routes(server):
         content = [
             {
                 "type": "text",
-                "text": (user_prompt + "\n")
-                if len(user_prompt) > 0
-                else "" + input_data,
+                "text": (user_prompt + "\n") if len(user_prompt) > 0 else "" + input_data,
             }
         ]
         if input_attachment:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
-                }
-            )
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
+            })
         user_message = ChatMessage(
             content=content,
             role="user",

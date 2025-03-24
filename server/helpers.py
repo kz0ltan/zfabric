@@ -35,6 +35,3 @@ def ensure_directories_exist(path: str) -> None:
 
     if not os.path.exists(abs_path):
         os.makedirs(abs_path)
-        print(f"Created directories: {abs_path}")
-    else:
-        print(f"Directories already exist: {abs_path}")
