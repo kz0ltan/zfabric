@@ -423,7 +423,7 @@ def query_server(
         "session": qparams.get("session", args.session),
     }
 
-    if not len(post_data["input"]) > 0:
+    if not len(post_data["input"]) > 0 and not args.delete:
         post_data["input"] = read_cli_input()
 
     while True:
@@ -438,7 +438,7 @@ def query_server(
             stream=bool(qparams.get("stream", not args.no_stream)),
             usage=args.usage,
         )
-        if not args.chat:
+        if not args.chat or args.delete or session_id is None:
             return
 
         # set session to the one received from server
