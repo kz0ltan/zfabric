@@ -30,27 +30,28 @@ def get_comments(youtube, video_id):
             part="snippet,replies",
             videoId=video_id,
             textFormat="plainText",
-            maxResults=100  # Adjust based on needs
+            maxResults=100,  # Adjust based on needs
         )
 
         while request:
             response = request.execute()
-            for item in response['items']:
+            for item in response["items"]:
                 # Top-level comment
-                topLevelComment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+                topLevelComment = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
                 comments.append(topLevelComment)
 
                 # Check if there are replies in the thread
-                if 'replies' in item:
-                    for reply in item['replies']['comments']:
-                        replyText = reply['snippet']['textDisplay']
+                if "replies" in item:
+                    for reply in item["replies"]["comments"]:
+                        replyText = reply["snippet"]["textDisplay"]
                         # Add incremental spacing and a dash for replies
                         comments.append("    - " + replyText)
 
             # Prepare the next page of comments, if available
-            if 'nextPageToken' in response:
+            if "nextPageToken" in response:
                 request = youtube.commentThreads().list_next(
-                    previous_request=request, previous_response=response)
+                    previous_request=request, previous_response=response
+                )
             else:
                 request = None
 
@@ -91,21 +92,25 @@ def main_function(url, options, return_only=False):
 
         # Set up metadata
         metadata = {}
-        metadata['id'] = video_response['items'][0]['id']
-        metadata['description'] = video_response["items"][0]["snippet"]["description"]
-        metadata['title'] = video_response['items'][0]['snippet']['title']
-        metadata['channel'] = video_response['items'][0]['snippet']['channelTitle']
-        metadata['published_at'] = video_response['items'][0]['snippet']['publishedAt']
+        metadata["id"] = video_response["items"][0]["id"]
+        metadata["description"] = video_response["items"][0]["snippet"]["description"]
+        metadata["title"] = video_response["items"][0]["snippet"]["title"]
+        metadata["channel"] = video_response["items"][0]["snippet"]["channelTitle"]
+        metadata["published_at"] = video_response["items"][0]["snippet"]["publishedAt"]
 
         # Get video transcript
         try:
             transcript_list = YouTubeTranscriptApi.get_transcript(
-                video_id, languages=[options.lang])
+                video_id, languages=[options.lang]
+            )
+            # transcript_list[x]["start"] stores the start time in seconds
             transcript_text = " ".join([item["text"]
                                        for item in transcript_list])
             transcript_text = transcript_text.replace("\n", " ")
         except Exception as e:
-            transcript_text = f"Transcript not available in the selected language ({options.lang}). ({e})"
+            transcript_text = (
+                f"Transcript not available in the selected language ({options.lang}). ({e})"
+            )
 
         # Get comments if the flag is set
         comments = []
@@ -130,7 +135,7 @@ def main_function(url, options, return_only=False):
             print(output["duration"])
         elif options.transcript:
             print(output["transcript"].encode(
-                'utf-8').decode('unicode-escape'))
+                "utf-8").decode("unicode-escape"))
         elif options.comments:
             print(json.dumps(output["comments"], indent=2))
         elif options.metadata:
@@ -138,23 +143,26 @@ def main_function(url, options, return_only=False):
 
     except HttpError as e:
         print(
-            f"Error: Failed to access YouTube API. Please check your YOUTUBE_API_KEY and ensure it is valid: {e}")
+            f"Error: Failed to access YouTube API. Please check your YOUTUBE_API_KEY and ensure it is valid: {e}"
+        )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='yt (video meta) extracts metadata about a video, such as the transcript, the video\'s duration, and now comments. By Daniel Miessler.')
-    parser.add_argument('url', help='YouTube video URL')
-    parser.add_argument('--duration', action='store_true',
-                        help='Output only the duration')
-    parser.add_argument('--transcript', action='store_true',
-                        help='Output only the transcript')
-    parser.add_argument('--comments', action='store_true',
-                        help='Output the comments on the video')
-    parser.add_argument('--metadata', action='store_true',
-                        help='Output the video metadata')
-    parser.add_argument('--lang', default='en',
-                        help='Language for the transcript (default: English)')
+        description="yt (video meta) extracts metadata about a video, such as the transcript, the video's duration, and now comments. By Daniel Miessler."
+    )
+    parser.add_argument("url", help="YouTube video URL")
+    parser.add_argument("--duration", action="store_true",
+                        help="Output only the duration")
+    parser.add_argument("--transcript", action="store_true",
+                        help="Output only the transcript")
+    parser.add_argument("--comments", action="store_true",
+                        help="Output the comments on the video")
+    parser.add_argument("--metadata", action="store_true",
+                        help="Output the video metadata")
+    parser.add_argument(
+        "--lang", default="en", help="Language for the transcript (default: English)"
+    )
 
     args = parser.parse_args()
 
