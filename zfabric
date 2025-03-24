@@ -43,7 +43,7 @@ def parse_variables(variables_to_parse):
 
 
 def signal_handler(sig, frame):
-    print("\n")
+    print()
     sys.exit(0)
 
 
@@ -150,20 +150,6 @@ def coalesce_input(data: Dict[str, str]):
                 data["input"] += "\n\n" + data[source]
             del data[source]
 
-    # if "yt_input" in data:
-    #    if len(data["input"]) == 0:
-    #        data["input"] = data["yt_input"]
-    #    else:
-    #        data["input"] += "\n\n" + data["yt_input"]
-    #    del data["yt_input"]
-
-    # if "web_input" in data:
-    #    if len(data["input"]) == 0:
-    #        data["input"] = data["web_input"]
-    #    else:
-    #        data["input"] += "\n\n" + data["web_input"]
-    #    del data["web_input"]
-
     return data
 
 
@@ -234,8 +220,10 @@ def send_query(
             query_response = requests.delete(
                 generation_url, headers=headers, params=params, timeout=TIMEOUT
             )
+        else:
+            query_response = None
     except requests.exceptions.ConnectionError as ex:
-        print("Connection to the server failed")
+        print(f"Connection to the server failed: {ex}")
         return
 
     return query_response
@@ -403,6 +391,18 @@ def list_objects(object_name: str, ccopy: bool = False, ofile: Optional[str] = N
         print_list(resp_json["response"], ccopy=ccopy, ofile=ofile)
 
 
+def read_cli_input():
+    if not sys.stdin.isatty():
+        # reopen tty as we lost that with sys.stdin.read()
+        sys.stdin = open("/dev/tty", "r", encoding="utf-8")
+    try:
+        return input("> ")
+    except EOFError:
+        # catch ctrl+d
+        print()
+        sys.exit(0)
+
+
 def query_server(
     qry_str: str,
     args: argparse.Namespace,
@@ -420,6 +420,9 @@ def query_server(
         "session": qparams.get("session", args.session),
     }
 
+    if not len(post_data["input"]) > 0:
+        post_data["input"] = read_cli_input()
+
     while True:
         resp = send_query(qry_str, query_params, post_data, method=method)
         print_response(
@@ -432,11 +435,13 @@ def query_server(
         if not args.chat:
             return
 
-        if not sys.stdin.isatty():
-            # reopen tty as we lost that with sys.stdin.read()
-            sys.stdin = open("/dev/tty", "r", encoding="utf-8")
+        # if not sys.stdin.isatty():
+        #    # reopen tty as we lost that with sys.stdin.read()
+        #    sys.stdin = open("/dev/tty", "r", encoding="utf-8")
+        # post_data = {}
+        # post_data["input"] = input("> ")
         post_data = {}
-        post_data["input"] = input("> ")
+        post_data["input"] = read_cli_input()
 
 
 def get_yt_options(args: argparse.Namespace):
@@ -659,9 +664,6 @@ if __name__ == "__main__":
     )
     data = coalesce_input(data)
 
-    # query_server(BASE_URL + "/atterns/" + cli_args.pattern, cli_args, data)
-    # sys.exit(0)
-
     if cli_args.list:
         if cli_args.session:
             list_sessions(cli_args.session, ccopy=cli_args.copy, ofile=cli_args.ofile)
@@ -679,7 +681,7 @@ if __name__ == "__main__":
         query_server(BASE_URL + "/tokens", cli_args, data, qparams={"stream": False})
     elif cli_args.pattern:
         query_server(BASE_URL + "/patterns/" + cli_args.pattern, cli_args, data)
-    elif len(data["input"]) > 0 and cli_args.session:
+    elif (len(data["input"]) > 0 or cli_args.chat) and cli_args.session:
         query_server(BASE_URL + "/session", cli_args, data)
     else:
         print_str(data["input"], ccopy=cli_args.copy, ofile=cli_args.ofile)
