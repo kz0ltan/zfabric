@@ -121,7 +121,9 @@ def main_function(url, options, return_only=False):
         if options.duration:
             output["duration"] = duration_minutes
         if options.transcript:
-            output["transcript"] = transcript_text
+            output["transcript"] = (
+                transcript_list if options.transcript_as_list else transcript_text
+            )
         if options.comments:
             output["comments"] = comments
         if options.metadata:
@@ -133,12 +135,18 @@ def main_function(url, options, return_only=False):
         # Output based on options
         if options.duration:
             print(output["duration"])
-        elif options.transcript:
-            print(output["transcript"].encode(
-                "utf-8").decode("unicode-escape"))
-        elif options.comments:
+
+        if options.transcript:
+            if not options.transcript_as_list:
+                print(output["transcript"].encode(
+                    "utf-8").decode("unicode-escape"))
+            else:
+                print(json.dumps({"items": output["transcript"]}, indent=2))
+
+        if options.comments:
             print(json.dumps(output["comments"], indent=2))
-        elif options.metadata:
+
+        if options.metadata:
             print(json.dumps(output["metadata"], indent=2))
 
     except HttpError as e:
@@ -148,18 +156,22 @@ def main_function(url, options, return_only=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="yt (video meta) extracts metadata about a video, such as the transcript, the video's duration, and now comments. By Daniel Miessler."
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument("url", help="YouTube video URL")
     parser.add_argument("--duration", action="store_true",
-                        help="Output only the duration")
+                        help="Output the duration")
     parser.add_argument("--transcript", action="store_true",
-                        help="Output only the transcript")
+                        help="Output the transcript")
     parser.add_argument("--comments", action="store_true",
-                        help="Output the comments on the video")
+                        help="Output the comments")
     parser.add_argument("--metadata", action="store_true",
                         help="Output the video metadata")
+    parser.add_argument(
+        "--transcript-as-list",
+        action="store_true",
+        default=False,
+        help="Return transcript as a list",
+    )
     parser.add_argument(
         "--lang", default="en", help="Language for the transcript (default: English)"
     )
