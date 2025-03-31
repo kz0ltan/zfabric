@@ -21,8 +21,6 @@ from tools.extract import confluence
 from server.helpers import load_file
 
 ENV_PATH = "~/.config/zfabric/.env"
-# BASE_URL="http://websrv4.kzoltan.srv:13337"
-BASE_URL = "http://localhost:13337"
 TIMEOUT = 60
 
 # ANSI Escape Codes
@@ -365,7 +363,7 @@ def print_chat(
 
 def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None):
     """Print a session's history"""
-    url = BASE_URL + "/session/" + session
+    url = base_url + "/session/" + session
 
     query_params = {
         "session": session,
@@ -385,7 +383,7 @@ def list_sessions(session: str, ccopy: bool = False, ofile: Optional[str] = None
 
 def list_objects(object_name: str, ccopy: bool = False, ofile: Optional[str] = None):
     """Print objects defined by -l cli argument"""
-    resp = send_query(BASE_URL + "/" + object_name)
+    resp = send_query(base_url + "/" + object_name)
     if resp is None:
         return
     print_error(resp)
@@ -486,6 +484,7 @@ class CustomAction(argparse.Action):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
+    base_url = os.getenv("BASE_URL", default="http://localhost:13337")
 
     parser = argparse.ArgumentParser(description="zFabric client application")
     group = parser.add_mutually_exclusive_group(required=False)
@@ -675,17 +674,17 @@ if __name__ == "__main__":
             list_objects(cli_args.list, ccopy=cli_args.copy, ofile=cli_args.ofile)
     elif cli_args.delete and cli_args.session:
         query_server(
-            BASE_URL + "/session/" + cli_args.session,
+            base_url + "/session/" + cli_args.session,
             cli_args,
             data,
             qparams={"stream": False},
             method="DELETE",
         )
     elif cli_args.tokens:
-        query_server(BASE_URL + "/tokens", cli_args, data, qparams={"stream": False})
+        query_server(base_url + "/tokens", cli_args, data, qparams={"stream": False})
     elif cli_args.pattern:
-        query_server(BASE_URL + "/patterns/" + cli_args.pattern, cli_args, data)
+        query_server(base_url + "/patterns/" + cli_args.pattern, cli_args, data)
     elif (len(data["input"]) > 0 or cli_args.chat) and cli_args.session:
-        query_server(BASE_URL + "/session", cli_args, data)
+        query_server(base_url + "/session", cli_args, data)
     else:
         print_str(data["input"], ccopy=cli_args.copy, ofile=cli_args.ofile)
