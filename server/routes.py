@@ -179,7 +179,6 @@ def register_routes(server):
         messages += new_messages
         server.session_manager.add_messages(session, new_messages, merge=False)
 
-        breakpoint()
         return server.generator.generate(
             profile_name,
             messages,
