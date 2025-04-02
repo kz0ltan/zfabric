@@ -24,12 +24,10 @@ class SessionManager:
 
     def __init__(self, config: Dict[Any, Any]):
         self.db_path = config.get(
-            "sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3"
-        )
+            "sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3")
         self.table_name = config.get("sqlite3_table_name", "message_store")
         self.session_id_field_name = config.get(
-            "sqlite3_session_id_field_name", "session_id"
-        )
+            "sqlite3_session_id_field_name", "session_id")
         self._db_connection = None
         self.metadata = None
         self.table = None
@@ -85,9 +83,7 @@ class SessionManager:
             custom_message_converter=ExMessageConverter(self.table_name),
         )
 
-    def add_messages(
-        self, sess_id: str, messages: List[ChatMessage], merge: bool = True
-    ):
+    def add_messages(self, sess_id: str, messages: List[ChatMessage], merge: bool = True):
         """Store new messages in a session"""
         if sess_id is None:
             return
@@ -104,7 +100,8 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(
+                distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -123,14 +120,14 @@ class SessionManager:
             stmt = delete(self.table)
 
             if sess_id != "all":
-                stmt = stmt.where(self.table.c[self.session_id_field_name] == sess_id)
+                stmt = stmt.where(
+                    self.table.c[self.session_id_field_name] == sess_id)
             result = session.execute(stmt)
             session.commit()
 
             if result.rowcount > 0:
                 self.logger.info(
-                    f"Deleted {result.rowcount} messages from session: {sess_id}"
-                )
+                    f"Deleted {result.rowcount} messages from session: {sess_id}")
             else:
                 self.logger.info(f"No messages found in session: {sess_id}")
 
@@ -147,11 +144,63 @@ class VariableHandler:
         self.logger.addHandler(default_handler)
         self.logger.setLevel(self.config.get("loglevel", logging.INFO))
 
-    def resolve(self, template, variables: Dict):
-        """Replace variables in template (text)"""
-        self.logger.info("Variables replaced: %s", variables)
-        return re.sub(
-            r"{{\s*([^}\s]+)\s*}}",
+    def coalesce_data(self, data: Dict[str, str]):
+        if len(data) == 1:
+            return data["input"]
+
+        for source in list(data.keys()):
+            if source == "input":
+                continue
+
+            if len(data["input"]) == 0:
+                data["input"] = data[source]
+            else:
+                data["input"] += "\n\n" + data[source]
+            del data[source]
+
+        return data["input"]
+
+    def insert_data_into_template(self, template: str, data: Dict[str, str]) -> str:
+        """
+        Replace {{  }} expressions in template from data[] using regular expressions.
+        Replaced keys should be deleted from data.
+        """
+        pattern = re.compile(r"{{\s*([\w\d_]+)\s*}}")
+
+        def replace_match(match):
+            key = match.group(1)
+            if key in data:
+                self.logger.debug("Input data inserted: %s", key)
+                return data.pop(key)
+            return match.group(0)
+
+        return re.sub(pattern, replace_match, template)
+
+    def resolve(
+        self,
+        template: str,
+        variables: Dict[str, str],
+        data: Dict[str, str],
+        coalesce_data: bool = False,
+    ):
+        """
+        Replace variables in template (text)
+        If <var_name> exists in variables, replace, otherwise leave {{ var_name }} in template
+        """
+        self.logger.debug("Variables replaced: %s", variables)
+        template = re.sub(
+            r"{{\s*([\w\d_]+)\s*}}",
             lambda match: str(variables.get(match.group(1), match.group(0))),
             template,
         )
+
+        template = self.insert_data_into_template(template, data)
+
+        if coalesce_data and len(data):
+            return (
+                template + "\n\n" + self.coalesce_data(data)
+                if len(template)
+                else self.coalesce_data(data)
+            )
+
+        return template
