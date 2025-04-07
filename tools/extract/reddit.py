@@ -5,11 +5,11 @@
 import praw
 
 reddit = praw.Reddit(
-    client_id="23RwWbhlWIaawP4md2eQ0g",
-    client_secret="JuHXOktd9sERBSCo2zlintv_u9X3zg",
+    client_id="",
+    client_secret="",
     user_agent="Fabric",
     username="jlibling",
-    password="lw9UYtDul0OyMajgYk3Z",
+    password="",
 )
 
 
