@@ -24,10 +24,12 @@ class SessionManager:
 
     def __init__(self, config: Dict[Any, Any]):
         self.db_path = config.get(
-            "sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3")
+            "sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3"
+        )
         self.table_name = config.get("sqlite3_table_name", "message_store")
         self.session_id_field_name = config.get(
-            "sqlite3_session_id_field_name", "session_id")
+            "sqlite3_session_id_field_name", "session_id"
+        )
         self._db_connection = None
         self.metadata = None
         self.table = None
@@ -83,7 +85,9 @@ class SessionManager:
             custom_message_converter=ExMessageConverter(self.table_name),
         )
 
-    def add_messages(self, sess_id: str, messages: List[ChatMessage], merge: bool = True):
+    def add_messages(
+        self, sess_id: str, messages: List[ChatMessage], merge: bool = True
+    ):
         """Store new messages in a session"""
         if sess_id is None:
             return
@@ -100,8 +104,7 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(
-                distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -120,14 +123,14 @@ class SessionManager:
             stmt = delete(self.table)
 
             if sess_id != "all":
-                stmt = stmt.where(
-                    self.table.c[self.session_id_field_name] == sess_id)
+                stmt = stmt.where(self.table.c[self.session_id_field_name] == sess_id)
             result = session.execute(stmt)
             session.commit()
 
             if result.rowcount > 0:
                 self.logger.info(
-                    f"Deleted {result.rowcount} messages from session: {sess_id}")
+                    f"Deleted {result.rowcount} messages from session: {sess_id}"
+                )
             else:
                 self.logger.info(f"No messages found in session: {sess_id}")
 
@@ -145,6 +148,7 @@ class VariableHandler:
         self.logger.setLevel(self.config.get("loglevel", logging.INFO))
 
     def coalesce_data(self, data: Dict[str, str]):
+        """Joins data values into one data["input"]"""
         if len(data) == 1:
             return data["input"]
 
@@ -160,18 +164,43 @@ class VariableHandler:
 
         return data["input"]
 
-    def insert_data_into_template(self, template: str, data: Dict[str, str]) -> str:
+    def insert_data_into_template_with_globbing(
+        self, template: str, data: Dict[str, str]
+    ) -> str:
         """
         Replace {{  }} expressions in template from data[] using regular expressions.
         Replaced keys should be deleted from data.
         """
-        pattern = re.compile(r"{{\s*([\w\d_]+)\s*}}")
+        pattern = re.compile(r"{{\s*([\w\d_*?]+)\s*}}")
+
+        def matches_pattern(key: str, pattern: str) -> bool:
+            """Check if the key matches the glob pattern."""
+            if pattern == "*":
+                return True
+            if not pattern:
+                return False
+
+            # Convert glob pattern to regex
+            regex_pattern = (
+                "^" + re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".") + "$"
+            )
+            return re.match(regex_pattern, key) is not None
 
         def replace_match(match):
-            key = match.group(1)
-            if key in data:
-                self.logger.debug("Input data inserted: %s", key)
-                return data.pop(key)
+            glob_key = match.group(1)
+            matched_values = []
+
+            # Find all keys that match the glob pattern and join
+            for key in list(data.keys()):
+                if matches_pattern(key, glob_key):
+                    matched_values.append(data.pop(key))
+                    self.logger.debug("Input data inserted: %s", key)
+
+            # If we found any matches, return them joined
+            if len(matched_values) > 0:
+                return "\n\n".join(matched_values)
+
+            # Return the original match if no keys matched
             return match.group(0)
 
         return re.sub(pattern, replace_match, template)
@@ -194,7 +223,7 @@ class VariableHandler:
             template,
         )
 
-        template = self.insert_data_into_template(template, data)
+        template = self.insert_data_into_template_with_globbing(template, data)
 
         if coalesce_data and len(data):
             return (

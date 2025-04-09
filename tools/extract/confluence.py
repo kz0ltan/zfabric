@@ -83,9 +83,11 @@ class ConfluenceClient:
         return spaces
 
     def get_pages_of_space(
-        self, space_id: int, page_title: Optional[str] = None
+        self, space_id: Optional[int] = None, page_title: Optional[str] = None
     ) -> List:
         """Return all pages' metadata within a space"""
+        if not space_id:
+            space_id = self.space_id
         url = self.instance_url + f"/wiki/api/v2/spaces/{space_id}/pages"
         pages = self._paginated_request(
             url, max_pages=99999, search_field="title", search_value=page_title
@@ -114,20 +116,30 @@ def print_list(input_iter: Iterable) -> None:
 def main(args: argparse.Namespace) -> None:
     """Main function"""
     client = ConfluenceClient()
-    if args.children:
+    if args.children and args.pahe_id:
         children = client.get_child_pages_by_id(args.page_id)
         print_list(children)
-    else:
+    elif args.page_id:
         page = client.get_page_by_id(args.page_id)
         print(json.dumps(page, indent=2))
+    elif args.pages:
+        pages = client.get_pages_of_space()
+        print(json.dumps(pages, indent=2))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Simple tool to download information from Confluence"
     )
-    parser.add_argument(
-        "--page-id", required=True, type=int, help="Page ID of a confluence page"
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--page-id",
+        type=int,
+        default=None,
+        help="Page ID of a confluence page",
+    )
+    group.add_argument(
+        "--pages", action="store_true", default=False, help="List pages in the space"
     )
     parser.add_argument(
         "--children",

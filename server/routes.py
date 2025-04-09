@@ -2,7 +2,7 @@ import datetime
 import itertools
 import json
 import os
-from typing import Optional, Union, Dict
+from typing import Optional, Union, Dict, List
 from pathlib import Path
 
 from flask import request, jsonify, Response
@@ -35,10 +35,27 @@ def register_routes(server):
     @server.app.route("/patterns", methods=["GET"])
     @auth_required(server)
     def list_patterns():
-        patterns = itertools.chain.from_iterable([
-            os.listdir(ppath) for ppath in server.config["pattern_paths"] if os.path.isdir(ppath)
-        ])
+        patterns = itertools.chain.from_iterable(
+            [
+                os.listdir(ppath)
+                for ppath in server.config["pattern_paths"]
+                if os.path.isdir(ppath)
+            ]
+        )
         return jsonify({"response": list(patterns)})
+
+    @server.app.route("/contexts", methods=["GET"])
+    @auth_required(server)
+    def list_contexts():
+        contexts = [
+            cfile
+            for cpath in server.config["context_paths"]
+            if os.path.isdir(cpath)
+            for cfile in os.listdir(cpath)
+            if os.path.isfile(os.path.join(cpath, cfile))
+        ]
+
+        return jsonify({"response": list(contexts)})
 
     @server.app.route("/sessions", methods=["GET"])
     @auth_required(server)
@@ -49,12 +66,14 @@ def register_routes(server):
     @auth_required(server)
     def get_session(session: str):
         if request.method == "GET":
-            return jsonify({
-                "response": [
-                    message_to_dict(msg)
-                    for msg in server.session_manager.get_session(session).messages
-                ]
-            })
+            return jsonify(
+                {
+                    "response": [
+                        message_to_dict(msg)
+                        for msg in server.session_manager.get_session(session).messages
+                    ]
+                }
+            )
 
         if request.method == "DELETE":
             server.session_manager.delete_session(session)
@@ -74,7 +93,8 @@ def register_routes(server):
         """
 
         server.app.logger.debug(
-            "Milling request received.\n\tArguments: " + str(request.args))
+            "Milling request received.\n\tArguments: " + str(request.args)
+        )
 
         profile_name = request.args.get("profile", None)
         model = request.args.get("model", None)
@@ -87,8 +107,8 @@ def register_routes(server):
         keep_alive = request.args.get("keep_alive", default=None)
         session = request.args.get(
             "session",
-            default=str(
-                pattern) + datetime.datetime.today().strftime("-%Y-%m-%d_%H-%M-%S-%f"),
+            default=str(pattern)
+            + datetime.datetime.today().strftime("-%Y-%m-%d_%H-%M-%S-%f"),
             # + str(generate_random_number(5)),
         )
         # skip saving session
@@ -96,10 +116,13 @@ def register_routes(server):
             session = None
 
         variables: Dict[str, Union[str, int]] = request.args.get(
-            "variables", default={})
+            "variables", default={}
+        )
 
         if options:
             options = json.loads(options)
+
+        contexts: List[str] = request.args.get("contexts", []).split(",")
 
         data = request.get_json()
         if len(data) == 0:
@@ -124,13 +147,34 @@ def register_routes(server):
                 if pattern_path.exists():
                     break
                 if ppath == server.config["pattern_paths"][-1]:
-                    return jsonify({"error": "Pattern not found"}), 400
+                    return jsonify({"error": f"Pattern not found: {pattern}"}), 400
+
+            if len(contexts) > 0:
+                for context in contexts:
+                    context_split = context.split(":", 1)
+                    tag = None
+                    if len(context_split) > 1:
+                        tag, context = context_split
+                        if len(tag) == 0:
+                            tag = None
+                    for cpath in server.config["context_paths"]:
+                        context_path = Path(cpath) / (context + ".md")
+                        if context_path.exists():
+                            data[tag if tag else "context_" + context] = load_file(
+                                context_path
+                            )
+                            break
+                        if cpath == server.config["context_paths"][-1]:
+                            return jsonify(
+                                {"error": f"Context not found: {context}"}
+                            ), 400
 
             # load system prompt; system prompt only works in empty (new) sessions
             if len(messages) == 0:
                 system_prompt = load_file(pattern_path / "system.md", "")
                 system_prompt = server.variable_handler.resolve(
-                    system_prompt, variables, data)
+                    system_prompt, variables, data
+                )
 
                 if len(system_prompt):
                     # Build the API call
@@ -155,15 +199,19 @@ def register_routes(server):
 
         content = []
         if len(user_prompt):
-            content.append({
-                "type": "text",
-                "text": user_prompt,
-            })
+            content.append(
+                {
+                    "type": "text",
+                    "text": user_prompt,
+                }
+            )
         if input_attachment:
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
-            })
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
+                }
+            )
         if len(content):
             user_message = ChatMessage(
                 content=content,
