@@ -122,7 +122,11 @@ def register_routes(server):
         if options:
             options = json.loads(options)
 
-        contexts: List[str] = request.args.get("contexts", []).split(",")
+        contexts: List[str] = (
+            request.args.get("contexts", "").split(",")
+            if request.args.get("contexts", "")
+            else []
+        )
 
         data = request.get_json()
         if len(data) == 0:

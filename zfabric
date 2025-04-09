@@ -103,7 +103,7 @@ def get_confluence_data(page_id: str):
 
 
 def read_input(
-    path: Optional[str] = None,
+    files: Optional[List[str]] = None,
     yt_url: Optional[str] = None,
     yt_options: Optional[Dict[str, bool]] = None,
     web_url: Optional[str] = None,
@@ -113,10 +113,17 @@ def read_input(
     """Read input from file/stdin or other sources"""
     input_data = {"input": ""}
 
-    if path:
-        with open(path, "r", encoding="utf-8") as f_desc:
-            input_data["input"] = f_desc.read()
-    elif stdin_has_pipe():
+    if files is not None and len(files) > 0:
+        for file_meta in files:
+            if ":" in file_meta:
+                tag, path = file_meta.split(":", 1)
+            else:
+                tag = "file_input"
+                path = file_meta
+            with open(path, "r", encoding="utf-8") as f_desc:
+                input_data[tag] = f_desc.read()
+
+    if stdin_has_pipe():
         input_data["input"] = sys.stdin.read().rstrip()
 
     if yt_url:
@@ -505,7 +512,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-i", "--ifile", type=file_exists, default=None, help="Input file path"
+        "-i",
+        "--ifile",
+        type=file_exists,
+        default=[],
+        action="append",
+        help="Input file path(s) in [<template_tag>:]<file_path> format",
     )
     parser.add_argument(
         "-o", "--ofile", type=file_not_exists, default=None, help="Output file path"
@@ -580,7 +592,7 @@ if __name__ == "__main__":
         action="append",
         type=str,
         default=[],
-        help="Context files to attach to the query",
+        help="Context files to attach to the query in [<template_tag>:]<context_name> format",
     )
     parser.add_argument(
         "--usage",

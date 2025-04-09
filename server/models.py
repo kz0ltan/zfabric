@@ -149,8 +149,11 @@ class VariableHandler:
 
     def coalesce_data(self, data: Dict[str, str]):
         """Joins data values into one data["input"]"""
-        if len(data) == 1:
+        if len(data) == 1 and list(data.keys())[0] == "input":
             return data["input"]
+
+        if "input" not in data:
+            data["input"] = ""
 
         for source in list(data.keys()):
             if source == "input":
