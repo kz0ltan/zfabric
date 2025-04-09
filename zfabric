@@ -449,7 +449,7 @@ def get_yt_options(args: argparse.Namespace):
     metadata = args.yt_metadata
     if not (args.yt_metadata or args.yt_comments or args.yt_transcripts):
         transcripts = True
-        metadata = True
+        # metadata = True
 
     return {
         "metadata": metadata,
