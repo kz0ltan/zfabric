@@ -6,7 +6,7 @@ import os
 from typing import Optional
 import traceback
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify
 
 from server.routes import register_routes
 from server.models import SessionManager, VariableHandler
@@ -51,7 +51,8 @@ class FabricAPIServer:
             self.app.logger.error("Error occured: %s", exception)
             stack_trace = "".join(
                 traceback.format_exception(
-                    type(exception), exception, exception.__traceback__)
+                    type(exception), exception, exception.__traceback__
+                )
             )
             self.app.logger.debug(stack_trace)
 

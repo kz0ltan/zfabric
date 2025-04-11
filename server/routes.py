@@ -132,10 +132,10 @@ def register_routes(server):
         if len(data) == 0:
             return jsonify({"error": "Missing input data"}), 400
 
-        input_attachment = None
-        if "attachment" in data:
-            input_attachment = data["attachment"]
-            del data["attachment"]
+        input_attachments = []
+        if "attachments" in data:
+            input_attachments = data["attachments"]
+            del data["attachments"]
 
         messages = []
         new_messages = []
@@ -209,14 +209,14 @@ def register_routes(server):
                     "text": user_prompt,
                 }
             )
-        if input_attachment:
+        for input_attachment in input_attachments:
             content.append(
                 {
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
                 }
             )
-        if len(content):
+        if len(content) > 0:
             user_message = ChatMessage(
                 content=content,
                 role="user",

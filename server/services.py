@@ -204,7 +204,10 @@ class Generator:
             model=model, messages=messages, system=system, stream=stream, **options
         )
 
-        yield from response
+        if stream:
+            yield from response
+        else:
+            yield response
 
     def _generate_ollama(
         self,
@@ -320,7 +323,7 @@ class Generator:
 
     @staticmethod
     def _anthropic_image_transformation(messages: List[Dict[str, Any]]):
-        """ """
+        """Convert image attachments to Anthropic format"""
         for message in messages:
             if isinstance(message["content"], list):
                 for msg in message["content"]:
@@ -443,7 +446,9 @@ class Generator:
                         )
                 self.session_manager.add_messages(session, messages)
 
-            return Response(response_stream_openai(), content_type="application/json")
+            return StreamingResponse(
+                response_stream_openai(), content_type="application/json"
+            )
 
         if service == "groq":
             api_messages = self._groq_image_transformation(api_messages)
@@ -515,7 +520,9 @@ class Generator:
                         )
                 self.session_manager.add_messages(session, messages)
 
-            return Response(response_stream_groq(), content_type="application/json")
+            return StreamingResponse(
+                response_stream_groq(), content_type="application/json"
+            )
 
         if service == "anthropic":
             api_messages = self._anthropic_image_transformation(api_messages)
@@ -584,11 +591,11 @@ class Generator:
                         stream=stream,
                         options=options,
                     ):
-                        if chunk.type == "content_block_delta":
-                            ret["response"] += chunk.delta.text
+                        if chunk.type == "message":
+                            ret["response"] += chunk.content[0].text
                             messages.append(
                                 ChatMessageChunk(
-                                    content=chunk.delta.text,
+                                    content=chunk.content[0].text,
                                     role="assistant",
                                     response_metadata={
                                         "model": model,
@@ -598,27 +605,20 @@ class Generator:
                                     },
                                 )
                             )
-                        if chunk.type == "message_start":
                             ret["usage"]["cache_creation_input_tokens"] = (
-                                chunk.message.usage.cache_creation_input_tokens
+                                chunk.usage.cache_creation_input_tokens
                             )
                             ret["usage"]["cache_read_input_tokens"] = (
-                                chunk.message.usage.cache_read_input_tokens
+                                chunk.usage.cache_read_input_tokens
                             )
-                            ret["usage"]["input_tokens"] = (
-                                chunk.message.usage.input_tokens
-                            )
-                            ret["usage"]["output_tokens"] = (
-                                chunk.message.usage.output_tokens
-                            )
-                        if chunk.type == "message_delta":
-                            ret["usage"]["output_tokens"] += chunk.usage.output_tokens
+                            ret["usage"]["input_tokens"] = chunk.usage.input_tokens
+                            ret["usage"]["output_tokens"] = chunk.usage.output_tokens
 
                     yield json.dumps(ret) + "\n"
 
                 self.session_manager.add_messages(session, messages)
 
-            return Response(
+            return StreamingResponse(
                 response_stream_anthropic(), content_type="application/json"
             )
 
@@ -655,6 +655,25 @@ class Generator:
                     )
                 self.session_manager.add_messages(session, messages)
 
-            return Response(response_stream_ollama(), content_type="application/json")
+            return StreamingResponse(
+                response_stream_ollama(), content_type="application/json"
+            )
 
         raise ValueError(f"Unknown service '{service}'")
+
+
+class StreamingResponse(Response):
+    """Extension of Response to catch exceptions happening in generators
+    Normally these happen in the context of the WSGI server,
+    so Flask's error handlers are not catching exceptions returned by Ollama for example
+    """
+
+    def __init__(self, generator, *args, **kwargs):
+        self.generator = generator
+        super().__init__(self._stream(), *args, **kwargs)
+
+    def _stream(self):
+        try:
+            yield from self.generator
+        except Exception as e:
+            yield json.dumps({"error": f"Error in server request: {str(e)}"})

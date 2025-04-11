@@ -107,7 +107,7 @@ def read_input(
     yt_url: Optional[str] = None,
     yt_options: Optional[Dict[str, bool]] = None,
     web_url: Optional[str] = None,
-    attachment: Optional[str] = None,
+    attachments: List[str] = [],
     confluence_page_id: Optional[str] = None,
 ) -> Dict[str, str]:
     """Read input from file/stdin or other sources"""
@@ -136,10 +136,16 @@ def read_input(
         web_data = get_web_data(web_url)
         input_data["web_input"] = json.dumps(web_data)
 
-    if attachment:
-        input_data["attachment"] = base64.b64encode(
-            load_file(attachment, type="rb")
-        ).decode("ascii")
+    if len(attachments) > 0:
+        input_data["attachments"] = []
+        for attachment in attachments:
+            input_data["attachments"].append(
+                base64.b64encode(load_file(attachment, type="rb")).decode("ascii")
+            )
+    # if attachment:
+    #    input_data["attachment"] = base64.b64encode(
+    #        load_file(attachment, type="rb")
+    #    ).decode("ascii")
 
     if confluence_page_id:
         input_data["confl_input"] = get_confluence_data(confluence_page_id)
@@ -234,7 +240,11 @@ def print_usage(need_print: bool, response_json: Dict):
 def print_error(response_json):
     """Print error data from HTTP responses"""
     if "error" in response_json:
-        print("Error: " + response_json["error"])
+        print(
+            "Error: "
+            if "Error" not in response_json["error"]
+            else "" + response_json["error"]
+        )
 
 
 def print_response(
@@ -539,7 +549,8 @@ if __name__ == "__main__":
         "-a",
         "--attachment",
         type=file_exists,
-        default=None,
+        action="append",
+        default=[],
         help="Path of file attachment (for binary files, like images)",
     )
     parser.add_argument(
