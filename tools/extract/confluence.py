@@ -94,11 +94,24 @@ class ConfluenceClient:
         )
         return pages
 
-    def get_page_by_id(self, page_id: int) -> Dict:
+    def get_page_by_id(
+        self, page_id: int, recursive: bool = False, limit: int = 10
+    ) -> List[Dict]:
         """Get page contents based on page_id"""
         url = self.instance_url + f"/wiki/api/v2/pages/{page_id}?body-format=view"
         response = self._send_request(url)
-        return response.json()
+
+        responses = []
+        if recursive:
+            children = self.get_child_pages_by_id(page_id)
+            child_ids = [list(child.keys())[0] for child in children]
+            responses.extend(
+                [self.get_page_by_id(child_id)[0] for child_id in child_ids[:limit]]
+            )
+        else:
+            responses.append(response.json())
+
+        return responses
 
     def get_child_pages_by_id(self, page_id: int) -> Dict:
         """Get child pages based on page_id"""
@@ -120,7 +133,7 @@ def main(args: argparse.Namespace) -> None:
         children = client.get_child_pages_by_id(args.page_id)
         print_list(children)
     elif args.page_id:
-        page = client.get_page_by_id(args.page_id)
+        page = client.get_page_by_id(args.page_id)[0]
         print(json.dumps(page, indent=2))
     elif args.pages:
         pages = client.get_pages_of_space()
