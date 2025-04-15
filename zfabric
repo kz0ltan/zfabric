@@ -98,11 +98,13 @@ def get_web_data(web_url: str):
     return web.extract(web_url, "jina.ai")
 
 
-def get_confluence_data(page_id: str):
+def get_confluence_data(page_id: int, recursive: bool = False):
     """Wrapper to external function that downloads Confluence page data"""
     client = confluence.ConfluenceClient()
-    contents = client.get_page_by_id(page_id)["body"]["view"]["value"]
-    return contents
+    contents = client.get_page_by_id(page_id, recursive=recursive)
+    return "\n\n---------\n\n".join(
+        [content["body"]["view"]["value"] for content in contents]
+    )
 
 
 def read_input(
@@ -111,7 +113,8 @@ def read_input(
     yt_options: Optional[Dict[str, bool]] = None,
     web_url: Optional[str] = None,
     attachments: List[str] = [],
-    confluence_page_id: Optional[str] = None,
+    confluence_page_id: Optional[int] = None,
+    recursive: bool = False,
 ) -> Dict[str, str]:
     """Read input from file/stdin or other sources"""
     input_data = {"input": ""}
@@ -152,7 +155,9 @@ def read_input(
     #    ).decode("ascii")
 
     if confluence_page_id:
-        input_data["confl_input"] = get_confluence_data(confluence_page_id)
+        input_data["confl_input"] = get_confluence_data(
+            confluence_page_id, recursive=recursive
+        )
 
     return input_data
 
@@ -609,6 +614,12 @@ if __name__ == "__main__":
         help="Input a Confluence page ID and get page data",
     )
     parser.add_argument(
+        "--cnfl-recursive",
+        default=False,
+        action="store_true",
+        help="Retrieve Confluence child pages recursively (limited to 10 pages)",
+    )
+    parser.add_argument(
         "-v",
         "--variable",
         action="append",
@@ -706,6 +717,7 @@ if __name__ == "__main__":
         cli_args.url,
         cli_args.attachment,
         cli_args.cnfl,
+        cli_args.cnfl_recursive,
     )
 
     if cli_args.list:
