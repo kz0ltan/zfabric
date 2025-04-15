@@ -37,7 +37,8 @@ class Generator:
 
     def _get_profile(self, profile_name):
         if profile_name is None:  # try default profile
-            profile_name = self.config.get("profiles", {}).get("default_profile", None)
+            profile_name = self.config.get(
+                "profiles", {}).get("default_profile", None)
             if profile_name is None:
                 raise ValueError("No default profile defined")
 
@@ -45,9 +46,8 @@ class Generator:
 
     @staticmethod
     def _basic_auth(username, password):
-        token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode(
-            "ascii"
-        )
+        token = base64.b64encode(
+            f"{username}:{password}".encode("utf-8")).decode("ascii")
         return f"Basic {token}"
 
     def _get_ollama_client(self, profile: Dict):
@@ -73,9 +73,7 @@ class Generator:
         assert endpoint is not None, "Endpoint for profile not found in config!"
         assert api_key is not None, "API key for profile not found in config!"
 
-        return openai.AzureOpenAI(
-            azure_endpoint=endpoint, api_key=api_key, api_version=api_version
-        )
+        return openai.AzureOpenAI(azure_endpoint=endpoint, api_key=api_key, api_version=api_version)
 
     def _get_openai_client(self, profile: Dict):
         api_key = profile.get("api_key", None)
@@ -91,9 +89,7 @@ class Generator:
         api_key = profile.get("api_key", None)
         endpoint = profile.get("endpoint", None)
         assert api_key is not None, "API key for profile not found in config!"
-        return Anthropic(
-            api_key=api_key, base_url=endpoint, default_headers={"api-key": api_key}
-        )
+        return Anthropic(api_key=api_key, base_url=endpoint, default_headers={"api-key": api_key})
 
     def _get_client(self, profile_name):
         if profile_name in self._clients:
@@ -109,7 +105,8 @@ class Generator:
         if profile["type"].lower() == "ollama":
             self._clients[profile_name] = self._get_ollama_client(profile)
         elif profile["type"].lower() == "azure_openai":
-            self._clients[profile_name] = self._get_azure_openai_client(profile)
+            self._clients[profile_name] = self._get_azure_openai_client(
+                profile)
         elif profile["type"].lower() == "openai":
             self._clients[profile_name] = self._get_openai_client(profile)
         elif profile["type"].lower() == "groq":
@@ -315,7 +312,8 @@ class Generator:
                     if messages[0]["role"] == "system":
                         if messages[1]["role"] == "user":
                             messages[1]["content"].insert(
-                                0, {"type": "text", "text": messages[0]["content"]}
+                                0, {"type": "text",
+                                    "text": messages[0]["content"]}
                             )
                             messages.pop(0)
 
@@ -332,9 +330,8 @@ class Generator:
                         msg["source"] = {"type": "base64"}
                         data = base64.b64decode(msg["image_url"]["url"][23:])
                         del msg["image_url"]
-                        msg["source"]["data"] = base64.standard_b64encode(data).decode(
-                            "utf-8"
-                        )
+                        msg["source"]["data"] = base64.standard_b64encode(
+                            data).decode("utf-8")
                         msg["source"]["media_type"] = "image/jpeg"
 
         return messages
@@ -374,8 +371,10 @@ class Generator:
         timestamp = datetime.datetime.now().timestamp()
 
         if service in ("openai", "azure_openai"):
-            translated_options, ignored_options = self.translate_options(options)
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(
+                options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -432,28 +431,26 @@ class Generator:
                                 },
                             )
                         )
-                        yield json.dumps(
-                            {
-                                "response": txt,
-                                "usage": {
-                                    "prompt_tokens": chunk.usage.prompt_tokens,
-                                    "completion_tokens": chunk.usage.completion_tokens,
-                                    "total_tokens": chunk.usage.total_tokens,
-                                },
-                                "ignored_options": ",".join(ignored_options),
-                                "session": session,
-                            }
-                        )
+                        yield json.dumps({
+                            "response": txt,
+                            "usage": {
+                                "prompt_tokens": chunk.usage.prompt_tokens,
+                                "completion_tokens": chunk.usage.completion_tokens,
+                                "total_tokens": chunk.usage.total_tokens,
+                            },
+                            "ignored_options": ",".join(ignored_options),
+                            "session": session,
+                        })
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(
-                response_stream_openai(), content_type="application/json"
-            )
+            return StreamingResponse(response_stream_openai(), content_type="application/json")
 
         if service == "groq":
             api_messages = self._groq_image_transformation(api_messages)
-            translated_options, ignored_options = self.translate_options(options)
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            translated_options, ignored_options = self.translate_options(
+                options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_groq():
                 messages = []
@@ -506,30 +503,27 @@ class Generator:
                                 },
                             )
                         )
-                        yield json.dumps(
-                            {
-                                "response": txt,
-                                "usage": {
-                                    "prompt_tokens": chunk.usage.prompt_tokens,
-                                    "completion_tokens": chunk.usage.completion_tokens,
-                                    "total_tokens": chunk.usage.total_tokens,
-                                },
-                                "ignored_options": ",".join(ignored_options),
-                                "session": session,
-                            }
-                        )
+                        yield json.dumps({
+                            "response": txt,
+                            "usage": {
+                                "prompt_tokens": chunk.usage.prompt_tokens,
+                                "completion_tokens": chunk.usage.completion_tokens,
+                                "total_tokens": chunk.usage.total_tokens,
+                            },
+                            "ignored_options": ",".join(ignored_options),
+                            "session": session,
+                        })
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(
-                response_stream_groq(), content_type="application/json"
-            )
+            return StreamingResponse(response_stream_groq(), content_type="application/json")
 
         if service == "anthropic":
             api_messages = self._anthropic_image_transformation(api_messages)
             translated_options, ignored_options = self.translate_options(
                 options, flavor="anthropic"
             )
-            self.logger.debug("Ignored options in the request: %s", ignored_options)
+            self.logger.debug(
+                "Ignored options in the request: %s", ignored_options)
 
             def response_stream_anthropic():
                 messages = []
@@ -618,9 +612,7 @@ class Generator:
 
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(
-                response_stream_anthropic(), content_type="application/json"
-            )
+            return StreamingResponse(response_stream_anthropic(), content_type="application/json")
 
         if service == "ollama":
             api_messages = self._ollama_image_transformation(api_messages)
@@ -649,15 +641,11 @@ class Generator:
                     )
                     yield (
                         json.dumps(
-                            {"response": chunk.message.content, "session": session}
-                        )
-                        + "\n"
+                            {"response": chunk.message.content, "session": session}) + "\n"
                     )
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(
-                response_stream_ollama(), content_type="application/json"
-            )
+            return StreamingResponse(response_stream_ollama(), content_type="application/json")
 
         raise ValueError(f"Unknown service '{service}'")
 
