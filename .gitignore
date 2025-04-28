@@ -4,3 +4,4 @@ config.json
 logs/*
 server/local
 server/local/**
+venv

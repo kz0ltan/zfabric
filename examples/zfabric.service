@@ -1,0 +1,18 @@
+Unit]
+Description=zFabric
+
+[Service]
+ExecStartPre=/bin/bash -c 'source /opt/zfabric/venv/bin/activate'
+ExecStart=/opt/zfabric/venv/bin/gunicorn -w1 -b 10.19.30.170:13337 "app:start()"
+WorkingDirectory=/opt/zfabric
+Environment="PATH=/opt/zfabric/venv/bin"
+Environment="CONFIG_PATH=/opt/zfabric/config.json"
+User=fabric
+Group=fabric
+Restart=always
+RestartSec=5
+#StandardOutput=append:/var/log/gunicorn.log
+#StandardError=append:/var/log/gunicorn_error.log
+
+[Install]
+WantedBy=multi-user.target
