@@ -92,6 +92,12 @@ def register_routes(server):
         profile_name = request.args.get("profile", None)
         model = request.args.get("model", None)
         options = request.args.get("options", None)
+        no_think = request.args.get(
+            "no_think",
+            default=False,
+            type=(lambda s: s.lower() in ("True", "true", "1")),
+        )
+
         stream = request.args.get(
             "stream",
             default=False,
@@ -187,6 +193,10 @@ def register_routes(server):
         user_prompt = server.variable_handler.resolve(
             user_prompt, variables, data, coalesce_data=True
         )
+
+        if no_think:
+            # Qwen3:30b Q4 tends to forget about this with longer contexts...
+            user_prompt = "/no_think " + user_prompt
 
         content = []
         if len(user_prompt):
