@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
 
+import argparse
+import isodate
+import json
+import os
 import re
+import time
+from xml.etree.ElementTree import ParseError
+from xml.parsers.expat import ExpatError
+
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from youtube_transcript_api import YouTubeTranscriptApi
 from dotenv import load_dotenv
-from datetime import datetime
-import os
-import json
-import isodate
-import argparse
 
 ENV_PATH = "~/.config/zfabric/.env"
+
+
+def _retry_operation(func, attempts: int = 3, delay: int = 2):
+    for attempt in range(attempts):
+        try:
+            return func()
+        except (ParseError, ExpatError) as e:
+            if attempt == attempts - 1:
+                raise e
+            time.sleep(delay)
 
 
 def get_video_id(url):
@@ -100,14 +113,24 @@ def main_function(url, options, return_only=False):
 
         # Get video transcript
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(
-                video_id, languages=[options.lang]
+            # This fails randomly ...
+            # https://github.com/jdepoix/youtube-transcript-api/issues/414
+            # a retry operation is used below as a workaround
+            # transcript_list = YouTubeTranscriptApi.get_transcript(
+            #    video_id, languages=[options.lang]
+            # )
+
+            transcript_list = _retry_operation(
+                lambda: YouTubeTranscriptApi.get_transcript(
+                    video_id, languages=[options.lang])
             )
+
             # transcript_list[x]["start"] stores the start time in seconds
             transcript_text = " ".join([item["text"]
                                        for item in transcript_list])
             transcript_text = transcript_text.replace("\n", " ")
         except Exception as e:
+            breakpoint()
             transcript_text = (
                 f"Transcript not available in the selected language ({options.lang}). ({e})"
             )

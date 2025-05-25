@@ -23,7 +23,7 @@ from tools.save import joplin as joplin_save
 from server.helpers import load_file
 
 ENV_PATH = "~/.config/zfabric/.env"
-TIMEOUT = 60
+TIMEOUT = None
 
 # ANSI Escape Codes
 BOLD_START = "\033[1m"
@@ -178,6 +178,8 @@ def file_not_exists(file_path):
 def set_options(parsed_args):
     """Set options in a JSON compatible format"""
     options = {}
+    if parsed_args.num_ctx is not None:
+        options["num_ctx"] = parsed_args.num_ctx
     if parsed_args.num_predict is not None:
         options["num_predict"] = parsed_args.num_predict
     if parsed_args.temperature is not None:
@@ -638,6 +640,12 @@ if __name__ == "__main__":
         help="Print token usage if streaming (currently the Azure API is buggy)",
     )
 
+    parser.add_argument(
+        "--num_ctx",
+        default=None,
+        type=int,
+        help="Ollama variable to set model context size",
+    )
     parser.add_argument(
         "-n",
         "--num_predict",

@@ -5,7 +5,7 @@ import os
 from typing import Optional, Union, Dict, List
 from pathlib import Path
 
-from flask import request, jsonify, Response
+from flask import request, jsonify
 from langchain_core.messages.chat import ChatMessage
 from langchain_core.messages import message_to_dict
 
@@ -19,7 +19,7 @@ def register_routes(server):
     @server.app.route("/tokens", methods=["POST"])
     @auth_required(server)
     def count_tokens():
-        text = request.get_json()["input"]
+        text = server.variable_handler.coalesce_data(request.get_json())
         return jsonify({"response": str(server.generator.count_tokens(text))})
 
     @server.app.route("/profiles", methods=["GET"])
