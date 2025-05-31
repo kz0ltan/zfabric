@@ -1,0 +1,4 @@
+{
+    "default_profile": "ollama",
+    "default_model": "phi4-reasoning:14b-plus-fp16"
+}
