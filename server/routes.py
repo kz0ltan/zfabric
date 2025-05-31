@@ -150,6 +150,14 @@ def register_routes(server):
                 if ppath == server.config["pattern_paths"][-1]:
                     return jsonify({"error": f"Pattern not found: {pattern}"}), 400
 
+            if profile_name is None:
+                raw_pattern_config = load_file(
+                    pattern_path / "config.json", default=None)
+                if raw_pattern_config is not None:
+                    pattern_config = json.loads(raw_pattern_config)
+                    profile_name = pattern_config.get("default_profile")
+                    model = pattern_config.get("default_model")
+
             if len(contexts) > 0:
                 for context in contexts:
                     context_split = context.split(":", 1)
