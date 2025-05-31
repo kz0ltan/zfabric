@@ -1,0 +1,50 @@
+{
+    "loglevel": 10,
+    "pattern_paths": [
+        "./server/patterns"
+    ],
+    "context_paths": [
+        "./local/contexts"
+    ],
+    "sqlite3_db_path": "~/.local/share/zfabric/sessions.sqlite3",
+    "profiles": {
+        "default_profile": "ollama",
+        "groq": {
+            "type": "groq",
+            "default_model": "llama-3.3-70b-versatile",
+            "api_key": ""
+        },
+        "ollama": {
+            "type": "ollama",
+            "default_model": "qwen3:30b",
+            "client": {
+	            "url": "http://127.0.0.1:11434",
+                "username": "ollama",
+                "password": ""
+	        }
+        },
+        "openai": {
+            "type": "openai",
+            "default_model": "gpt-4o-mini-2024-07-18",
+            "api_key": ""
+        },
+        "azure_openai": {
+            "type": "azure_openai",
+            "default_model": "gpt-4o-mini-2024-07-18",
+            "azure_endpoint": "",
+            "api_key": "",
+            "api_version": "2024-09-01-preview"
+        },
+        "anthropic": {
+            "type": "anthropic",
+            "default_model": "claude-3-5-haiku-20241022",
+            "api_key": ""
+        }
+    },
+    "users": {
+    	"username": {
+    	  "realname": "User Name",
+    	  "api_key": ""
+    	}
+    }
+}
