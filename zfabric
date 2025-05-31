@@ -515,6 +515,8 @@ class CustomAction(argparse.Action):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
+    load_dotenv(os.path.expanduser(ENV_PATH))
+
     base_url = os.getenv("BASE_URL", default="http://localhost:13337")
 
     parser = argparse.ArgumentParser(description="zFabric client application")
@@ -720,7 +722,6 @@ if __name__ == "__main__":
 
     cli_args = parser.parse_args()
     variables = parse_variables(cli_args.variable)
-    load_dotenv(os.path.expanduser(ENV_PATH))
 
     data = read_input(
         cli_args.ifile,
