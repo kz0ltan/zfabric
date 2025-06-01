@@ -86,7 +86,8 @@ def register_routes(server):
             Exception: If there is an error during the API call.
         """
 
-        server.app.logger.debug("Milling request received.\n\tArguments: " + str(request.args))
+        server.app.logger.debug(
+            "Milling request received.\n\tArguments: " + str(request.args))
 
         profile_name = request.args.get("profile", None)
         model = request.args.get("model", None)
@@ -105,20 +106,23 @@ def register_routes(server):
         keep_alive = request.args.get("keep_alive", default=None)
         session = request.args.get(
             "session",
-            default=str(pattern) + datetime.datetime.today().strftime("-%Y-%m-%d_%H-%M-%S-%f"),
+            default=str(
+                pattern) + datetime.datetime.today().strftime("-%Y-%m-%d_%H-%M-%S-%f"),
             # + str(generate_random_number(5)),
         )
         # skip saving session
         if session == "skip":
             session = None
 
-        variables: Dict[str, Union[str, int]] = request.args.get("variables", default={})
+        variables: Dict[str, Union[str, int]] = request.args.get(
+            "variables", default={})
 
         if options:
             options = json.loads(options)
 
         contexts: List[str] = (
-            request.args.get("contexts", "").split(",") if request.args.get("contexts", "") else []
+            request.args.get("contexts", "").split(
+                ",") if request.args.get("contexts", "") else []
         )
 
         data = request.get_json()
@@ -146,19 +150,23 @@ def register_routes(server):
                 if ppath == server.config["pattern_paths"][-1]:
                     return jsonify({"error": f"Pattern not found: {pattern}"}), 400
 
-            raw_pattern_config = load_file(pattern_path / "config.json", default=None)
+            # load pattern config
+            raw_pattern_config = load_file(
+                pattern_path / "config.json", default=None)
             if raw_pattern_config is not None:
                 pattern_config = json.loads(raw_pattern_config)
 
+                p_profile_name = pattern_config.get("default_profile")
                 if profile_name is None:
-                    profile_name = pattern_config.get("default_profile")
+                    profile_name = p_profile_name
 
-                if model is None:
-                    model = pattern_config.get("default_model")
+                if profile_name == p_profile_name:
+                    if model is None:
+                        model = pattern_config.get("default_model")
 
-                pattern_options = pattern_config.get("options", None)
-                if pattern_options is not None:
-                    options = merge_dicts(options, pattern_options)
+                    pattern_options = pattern_config.get("options", None)
+                    if pattern_options is not None:
+                        options = merge_dicts(options, pattern_options)
 
             if len(contexts) > 0:
                 for context in contexts:
@@ -171,7 +179,8 @@ def register_routes(server):
                     for cpath in server.config["context_paths"]:
                         context_path = Path(cpath) / (context + ".md")
                         if context_path.exists():
-                            data[tag if tag else "context_" + context] = load_file(context_path)
+                            data[tag if tag else "context_" +
+                                 context] = load_file(context_path)
                             break
                         if cpath == server.config["context_paths"][-1]:
                             return jsonify({"error": f"Context not found: {context}"}), 400
@@ -179,7 +188,8 @@ def register_routes(server):
             # load system prompt; system prompt only works in empty (new) sessions
             if len(messages) == 0:
                 system_prompt = load_file(pattern_path / "system.md", "")
-                system_prompt = server.variable_handler.resolve(system_prompt, variables, data)
+                system_prompt = server.variable_handler.resolve(
+                    system_prompt, variables, data)
 
                 if len(system_prompt):
                     # Build the API call

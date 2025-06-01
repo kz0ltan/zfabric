@@ -33,8 +33,7 @@ BOLD_END = "\033[0m"
 def validate_key_value(arg):
     """Simple test to check if key-value pair is readable"""
     if "=" not in arg:
-        raise argparse.ArgumentTypeError(
-            f"Argument '{arg}' is not in key=value format")
+        raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
     return arg
 
 
@@ -95,7 +94,7 @@ def get_yt_data(
 
 def get_web_data(web_url: str):
     """Wrapper to external function that scrapes a URL and returns text"""
-    return web.extract(web_url, "jina.ai")
+    return web.WebExtractor().extract(web_url, "jina.ai")
 
 
 def get_confluence_data(page_id: int, recursive: bool = False):
@@ -144,8 +143,7 @@ def read_input(
         input_data["attachments"] = []
         for attachment in attachments:
             input_data["attachments"].append(
-                base64.b64encode(
-                    load_file(attachment, type="rb")).decode("ascii")
+                base64.b64encode(load_file(attachment, type="rb")).decode("ascii")
             )
     # if attachment:
     #    input_data["attachment"] = base64.b64encode(
@@ -153,8 +151,7 @@ def read_input(
     #    ).decode("ascii")
 
     if confluence_page_id:
-        input_data["confl_input"] = get_confluence_data(
-            confluence_page_id, recursive=recursive)
+        input_data["confl_input"] = get_confluence_data(confluence_page_id, recursive=recursive)
 
     return input_data
 
@@ -300,8 +297,7 @@ def print_response(
         print_error(response_json)
         print_warnings(response_json)
 
-    write_alternative_outputs(
-        response_text, ccopy=ccopy, ofile=ofile, joplin=joplin)
+    write_alternative_outputs(response_text, ccopy=ccopy, ofile=ofile, joplin=joplin)
 
     if "session" in response_json:
         return response_json["session"]
@@ -407,8 +403,7 @@ def list_sessions(
     print_error(resp)
     resp_json = resp.json()
     if resp.ok and "response" in resp_json:
-        print_chat(resp_json["response"], ofile=ofile,
-                   ccopy=ccopy, joplin=joplin)
+        print_chat(resp_json["response"], ofile=ofile, ccopy=ccopy, joplin=joplin)
 
 
 def list_objects(
@@ -421,8 +416,7 @@ def list_objects(
     print_error(resp)
     resp_json = resp.json()
     if resp.ok and "response" in resp_json:
-        print_list(resp_json["response"], ccopy=ccopy,
-                   ofile=ofile, joplin=joplin)
+        print_list(resp_json["response"], ccopy=ccopy, ofile=ofile, joplin=joplin)
 
 
 def read_cli_input():
@@ -459,8 +453,7 @@ def query_server(
         post_data["input"] = read_cli_input()
 
     while True:
-        resp = send_query(qry_str, params=query_params,
-                          post_data=post_data, method=method)
+        resp = send_query(qry_str, params=query_params, post_data=post_data, method=method)
 
         session_id = print_response(
             resp,
@@ -719,8 +712,7 @@ if __name__ == "__main__":
         help="Session name to insert/query, use 'skip' to skip saving session",
     )
 
-    parser.add_argument("-r", "--profile",
-                        help="Profile to use (defined in server config.json)")
+    parser.add_argument("-r", "--profile", help="Profile to use (defined in server config.json)")
     parser.add_argument(
         "--no-stream",
         default=False,
@@ -760,11 +752,9 @@ if __name__ == "__main__":
             method="DELETE",
         )
     elif cli_args.tokens:
-        query_server(base_url + "/tokens", cli_args,
-                     data, qparams={"stream": False})
+        query_server(base_url + "/tokens", cli_args, data, qparams={"stream": False})
     elif cli_args.pattern:
-        query_server(base_url + "/patterns/" +
-                     cli_args.pattern, cli_args, data)
+        query_server(base_url + "/patterns/" + cli_args.pattern, cli_args, data)
     elif (len(data) > 0 or cli_args.chat) and cli_args.session:
         query_server(base_url + "/session", cli_args, data)
     else:
@@ -772,5 +762,4 @@ if __name__ == "__main__":
         for k, v in data.items():
             if len(v):
                 output += "### " + k + "\n" + str(v) + "\n"
-        print_str(output, ccopy=cli_args.copy,
-                  ofile=cli_args.ofile, joplin=cli_args.joplin)
+        print_str(output, ccopy=cli_args.copy, ofile=cli_args.ofile, joplin=cli_args.joplin)
