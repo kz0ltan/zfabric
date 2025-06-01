@@ -251,6 +251,13 @@ def print_error(response_json):
         print(f"Error: {response_json['error']}")
 
 
+def print_warnings(response_json):
+    """Print warning data from HTTP responses"""
+    if "warnings" in response_json:
+        for warn in response_json["warnings"]:
+            print(f"Warning: {warn}")
+
+
 def print_response(
     response,
     ofile: Optional[str] = None,
@@ -276,6 +283,7 @@ def print_response(
         response_json = {}
         for chunk in response.iter_lines():
             response_json = json.loads(chunk)
+            print_warnings(response_json)
             if "response" in response_json:
                 response_text += response_json["response"]
                 print(response_json["response"], end="", flush=True)
@@ -290,6 +298,7 @@ def print_response(
                 print(response_text)
         print_usage(usage, response_json)
         print_error(response_json)
+        print_warnings(response_json)
 
     write_alternative_outputs(
         response_text, ccopy=ccopy, ofile=ofile, joplin=joplin)

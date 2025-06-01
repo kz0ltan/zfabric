@@ -1,4 +1,5 @@
 import base64
+import copy
 import datetime
 import json
 import logging
@@ -8,12 +9,14 @@ from anthropic import Anthropic
 from flask.logging import default_handler
 from flask import Response
 from langchain_core.messages.chat import ChatMessage, ChatMessageChunk
+from langchain.schema import get_buffer_string
 from groq import Groq
 import ollama
 import openai
 import tiktoken
 
 from .models import SessionManager
+from .helpers import merge_dicts
 
 
 class Generator:
@@ -263,26 +266,31 @@ class Generator:
         return translated, ignored
 
     @staticmethod
-    def count_tokens(text: str, model: str = "gpt-4o-mini"):
+    def count_tokens(text: str, model: str = "gpt-4o-mini", round_up=False):
         """Count tokens of text"""
         encoding = tiktoken.encoding_for_model(model)
         tokens = encoding.encode(text)
-        return len(tokens)
+        n = len(tokens)
+
+        if not round_up:
+            return n
+        else:
+            return ((n + 8191) // 8192) * 8192
 
     @staticmethod
     def _chatmessages_to_json(messages: List[ChatMessage]):
         """Convert langchain message format to JSON compatible with APIs
         This is needed, because of the non-langchain implementation of generate()
         """
-        return [{"role": msg.role, "content": msg.content} for msg in messages]
+        return [{"role": msg.role, "content": copy.copy(msg.content)} for msg in messages]
 
     @staticmethod
-    def _ollama_image_transformation(messages: List[Dict[str, Any]]):
+    def _ollama_image_transformation(msg_list: List[Dict[str, Any]]):
         """
         Moves images (based64 encoded) out of the message list,
         so they can be fed to Ollama API
         """
-        for message in messages:
+        for i, message in enumerate(msg_list):
             if isinstance(message["content"], list):
                 idx = 0
                 txt = ""
@@ -297,8 +305,8 @@ class Generator:
                         txt += message["content"].pop(idx)["text"]
                     else:
                         idx += 1
-                message["content"] = txt
-        return messages
+                msg_list[i]["content"] = txt
+        return msg_list
 
     @staticmethod
     def _groq_image_transformation(messages: List[Dict[str, Any]]):
@@ -358,6 +366,10 @@ class Generator:
             model = profile.get("default_model", None)
             if model is None:
                 raise ValueError("Model unspecified")
+
+        profile_options = profile.get("options", None)
+        if profile_options is not None:
+            options = merge_dicts(options, profile_options)
 
         self.logger.info(
             "profile:%s // service:%s // model:%s // options:%s // stream:%s",
@@ -617,6 +629,22 @@ class Generator:
         if service == "ollama":
             api_messages = self._ollama_image_transformation(api_messages)
 
+            # setting context length for ollama dynamically forces ollama to
+            # reload the model if a different ctx size is provided :/
+            # The API does not allow to query loaded model's context size
+
+            warnings = []
+            if "num_ctx" not in options or options["num_ctx"] is None:
+                warnings.append(
+                    "num_ctx not set, falling back to Ollama default!")
+            else:
+                input_ctx_len = self.count_tokens(get_buffer_string(messages))
+                if options["num_ctx"] <= input_ctx_len * 1.2:
+                    warnings.append(
+                        f"num_ctx {options['num_ctx']} seems low "
+                        f"compared to input context length of {input_ctx_len}"
+                    )
+
             def response_stream_ollama():
                 messages = []
                 for chunk in self._generate_ollama(
@@ -639,10 +667,13 @@ class Generator:
                             },
                         )
                     )
-                    yield (
-                        json.dumps(
-                            {"response": chunk.message.content, "session": session}) + "\n"
-                    )
+
+                    r = {"response": chunk.message.content, "session": session}
+                    if len(warnings):
+                        r["warnings"] = copy.copy(warnings)
+                        warnings.clear()
+
+                    yield (json.dumps(r) + "\n")
                 self.session_manager.add_messages(session, messages)
 
             return StreamingResponse(response_stream_ollama(), content_type="application/json")

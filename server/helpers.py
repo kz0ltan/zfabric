@@ -1,8 +1,8 @@
 """Helper functions for zfabric"""
 
-import argparse
 import os
 import random
+from typing import Dict
 
 
 def load_file(path, default=None, type: str = "r"):
@@ -35,3 +35,7 @@ def ensure_directories_exist(path: str) -> None:
 
     if not os.path.exists(abs_path):
         os.makedirs(abs_path)
+
+
+def merge_dicts(dict1: Dict, dict2: Dict, overwrite=False):
+    return {**dict1, **{k: v for k, v in dict2.items() if overwrite or k not in dict1}}
