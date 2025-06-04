@@ -14,6 +14,7 @@ case "$1" in
     restart)
         echo "Restarting $SERVICE..."
         launchctl stop $SERVICE
+        sleep 1
         launchctl start $SERVICE
         ;;
     status)
