@@ -7,9 +7,17 @@ case "$1" in
         echo "Starting $SERVICE..."
         launchctl start $SERVICE
         ;;
+    enable)
+        echo "Enabling $SERVICE..."
+        launchctl enable $SERVICE
+        ;;
     stop)
         echo "Stopping $SERVICE..."
         launchctl stop $SERVICE
+        ;;
+    disable)
+        echo "Disabling $SERVICE..."
+        launchctl disable $SERVICE
         ;;
     restart)
         echo "Restarting $SERVICE..."
