@@ -79,9 +79,10 @@ class Generator:
         return openai.AzureOpenAI(azure_endpoint=endpoint, api_key=api_key, api_version=api_version)
 
     def _get_openai_client(self, profile: Dict):
+        base_url = profile.get("url", None)
         api_key = profile.get("api_key", None)
         assert api_key is not None, "API key for profile not found in config!"
-        return openai.OpenAI(api_key=api_key)
+        return openai.OpenAI(api_key=api_key, base_url=base_url)
 
     def _get_groq_client(self, profile: Dict):
         api_key = profile.get("api_key", None)

@@ -50,9 +50,7 @@ def get_comments(youtube, video_id):
             response = request.execute()
             for item in response["items"]:
                 # Top-level comment
-                topLevelComment = item["snippet"]["topLevelComment"]["snippet"][
-                    "textDisplay"
-                ]
+                topLevelComment = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
                 comments.append(topLevelComment)
 
                 # Check if there are replies in the thread
@@ -97,9 +95,8 @@ def main_function(url, options, return_only=False):
         youtube = build("youtube", "v3", developerKey=api_key)
 
         # Get video details
-        video_response = (
-            youtube.videos().list(id=video_id, part="contentDetails,snippet").execute()
-        )
+        video_response = youtube.videos().list(
+            id=video_id, part="contentDetails,snippet").execute()
 
         # Extract video duration and convert to minutes
         duration_iso = video_response["items"][0]["contentDetails"]["duration"]
@@ -117,20 +114,21 @@ def main_function(url, options, return_only=False):
         # Get video transcript
         try:
             # This fails randomly ...
-            # https://github.com/jdepoix/youtube-transcript-api/issues/414
+            # https://github.com/jdepoix/youtube-transcript-api/issues/429
             # a retry operation is used below as a workaround
+            # - this does not work anymore... waiting for update
             # transcript_list = YouTubeTranscriptApi.get_transcript(
             #    video_id, languages=[options.lang]
             # )
 
             transcript_list = _retry_operation(
                 lambda: YouTubeTranscriptApi.get_transcript(
-                    video_id, languages=[options.lang]
-                )
+                    video_id, languages=[options.lang])
             )
 
             # transcript_list[x]["start"] stores the start time in seconds
-            transcript_text = " ".join([item["text"] for item in transcript_list])
+            transcript_text = " ".join([item["text"]
+                                       for item in transcript_list])
             transcript_text = transcript_text.replace("\n", " ")
         except Exception as e:
             transcript_text = f"Transcript not available in the selected language ({options.lang}). ({e})\nThis could also mean that a random error occured with the YouTubeTranscriptAPI, try again and see if it works!"
@@ -161,7 +159,8 @@ def main_function(url, options, return_only=False):
 
         if options.transcript:
             if not options.transcript_as_list:
-                print(output["transcript"].encode("utf-8").decode("unicode-escape"))
+                print(output["transcript"].encode(
+                    "utf-8").decode("unicode-escape"))
             else:
                 print(json.dumps({"items": output["transcript"]}, indent=2))
 
@@ -180,14 +179,14 @@ def main_function(url, options, return_only=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("url", help="YouTube video URL")
-    parser.add_argument("--duration", action="store_true", help="Output the duration")
-    parser.add_argument(
-        "--transcript", action="store_true", help="Output the transcript"
-    )
-    parser.add_argument("--comments", action="store_true", help="Output the comments")
-    parser.add_argument(
-        "--metadata", action="store_true", help="Output the video metadata"
-    )
+    parser.add_argument("--duration", action="store_true",
+                        help="Output the duration")
+    parser.add_argument("--transcript", action="store_true",
+                        help="Output the transcript")
+    parser.add_argument("--comments", action="store_true",
+                        help="Output the comments")
+    parser.add_argument("--metadata", action="store_true",
+                        help="Output the video metadata")
     parser.add_argument(
         "--transcript-as-list",
         action="store_true",
