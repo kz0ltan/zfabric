@@ -5,3 +5,4 @@ logs/*
 server/local
 server/local/**
 venv
+.aider*
