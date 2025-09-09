@@ -456,7 +456,7 @@ class Generator:
                         })
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_openai(), content_type="application/json")
+            return StreamingResponse(response_stream_openai(), self.logger, content_type="application/json")
 
         if service == "groq":
             api_messages = self._groq_image_transformation(api_messages)
@@ -528,7 +528,7 @@ class Generator:
                         })
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_groq(), content_type="application/json")
+            return StreamingResponse(response_stream_groq(), self.logger, content_type="application/json")
 
         if service == "anthropic":
             api_messages = self._anthropic_image_transformation(api_messages)
@@ -625,7 +625,7 @@ class Generator:
 
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_anthropic(), content_type="application/json")
+            return StreamingResponse(response_stream_anthropic(), self.logger, content_type="application/json")
 
         if service == "ollama":
             api_messages = self._ollama_image_transformation(api_messages)
@@ -677,7 +677,7 @@ class Generator:
                     yield (json.dumps(r) + "\n")
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_ollama(), content_type="application/json")
+            return StreamingResponse(response_stream_ollama(), self.logger, content_type="application/json")
 
         raise ValueError(f"Unknown service '{service}'")
 
@@ -688,12 +688,15 @@ class StreamingResponse(Response):
     so Flask's error handlers are not catching exceptions returned by Ollama for example
     """
 
-    def __init__(self, generator, *args, **kwargs):
+    def __init__(self, generator, logger, *args, **kwargs):
         self.generator = generator
+        self.logger = logger
         super().__init__(self._stream(), *args, **kwargs)
 
     def _stream(self):
         try:
             yield from self.generator
         except Exception as e:
-            yield json.dumps({"error": f"Error in server request: {str(e)}"})
+            self.logger.error(
+                f"Error requesting inference server: {str(e)}")
+            yield json.dumps({"error": f"Error requesting inference server: {str(e)}"})
