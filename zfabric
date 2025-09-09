@@ -554,6 +554,8 @@ class CommandHandler(BaseHTTPRequestHandler):
                 return
 
             command_line = self.rfile.read(content_length).decode("utf-8")
+            print("#" * shutil.get_terminal_size().columns)
+            print("Command received: " + command_line)
 
             self.send_response(200)
             self.end_headers()
