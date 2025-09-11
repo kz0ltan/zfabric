@@ -1,7 +1,7 @@
 {
-    "default_profile": "ollama",
-    "default_model": "phi4-reasoning:14b-plus-fp16",
+    "default_profile": "lswap",
+    "default_model": "GPT-OSS-120b-GGUF-MXFP4",
     "options": {
-        "num_ctx": 32768
+        "temperature": 0
     }
 }
