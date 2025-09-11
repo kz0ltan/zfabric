@@ -42,9 +42,19 @@ def validate_key_value(arg):
     return arg
 
 
-def parse_variables(variables_to_parse):
+def parse_variables(variables_to_parse: List[str]):
     """Return a dict of variables"""
     return dict([v.split("=") for v in variables_to_parse])
+
+
+def load_variable_files(variables: Dict[str, str]):
+    """Load variables from files"""
+    for k, v in variables.items():
+        if v.startswith("@"):
+            path = os.path.expanduser(v[1:])
+            with open(path, 'r') as f:
+                variables[k] = f.read()
+    return variables
 
 
 def signal_handler(sig, frame):
@@ -117,6 +127,7 @@ def read_input(
     attachments: List[str] = [],
     confluence_page_id: Optional[int] = None,
     recursive: bool = False,
+    variables: List[str] = []
 ) -> Dict[str, str]:
     """Read input from file/stdin or other sources"""
     input_data = {"input": ""}
@@ -128,6 +139,7 @@ def read_input(
             else:
                 tag = "file_input"
                 path = file_meta
+            path = os.expanduser(path)
             with open(path, "r", encoding="utf-8") as f_desc:
                 input_data[tag] = f_desc.read()
 
@@ -159,6 +171,10 @@ def read_input(
     if confluence_page_id:
         input_data["confl_input"] = get_confluence_data(
             confluence_page_id, recursive=recursive)
+
+    d_variables = parse_variables(variables)
+    if len(d_variables):
+        input_data["variables"] = load_variable_files(d_variables)
 
     return input_data
 
@@ -324,7 +340,8 @@ def write_alternative_outputs(
         return
 
     if ofile is not None:
-        with open(ofile, "w", encoding="utf-8") as f:
+        path = os.expanduser(ofile)
+        with open(path, "w", encoding="utf-8") as f:
             f.write(text)
 
     if ccopy is not None:
@@ -450,7 +467,7 @@ def query_server(
 ):
     query_params = {
         "profile": qparams.get("profile", args.profile),
-        "variables": qparams.get("variable", args.variable),
+        # "variables": qparams.get("variable", args.variable),
         "model": qparams.get("model", args.model),
         "options": qparams.get("options", json.dumps(set_options(args))),
         "keep_alive": qparams.get("keep_alive", args.keepalive),
@@ -588,6 +605,7 @@ def execute_command(cli_args):
         cli_args.attachment,
         cli_args.cnfl,
         cli_args.cnfl_recursive,
+        cli_args.variable
     )
 
     if cli_args.list:
@@ -769,7 +787,7 @@ def parse_cli_args(command_args=None):
         action="append",
         type=validate_key_value,
         default=[],
-        help="Input variables to be replaced in patterns",
+        help="Input variables to be replaced in patterns, <template_tag>:[@]value where @ signals a file path",
     )
     parser.add_argument(
         "--context",
@@ -873,5 +891,4 @@ if __name__ == "__main__":
     base_url = os.getenv("BASE_URL", default="http://localhost:13337")
 
     cli_args = parse_cli_args()
-    # variables = parse_variables(cli_args.variable)
     execute_command(cli_args)

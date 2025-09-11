@@ -121,10 +121,6 @@ def register_routes(server):
         if session == "skip":
             session = None
 
-        variables: Dict[str, Union[str, int]] = request.args.get(
-            "variables", default={}
-        )
-
         if options:
             options = json.loads(options)
 
@@ -137,6 +133,8 @@ def register_routes(server):
         data = request.get_json()
         if len(data) == 0:
             return jsonify({"error": "Missing input data"}), 400
+
+        variables: Dict[str, str] = data.pop("variables", {})
 
         input_attachments = []
         if "attachments" in data:
@@ -160,7 +158,8 @@ def register_routes(server):
                     return jsonify({"error": f"Pattern not found: {pattern}"}), 400
 
             # load pattern config
-            raw_pattern_config = load_file(pattern_path / "config.json", default=False)
+            raw_pattern_config = load_file(
+                pattern_path / "config.json", default=False)
             if raw_pattern_config:
                 pattern_config = json.loads(raw_pattern_config)
 
