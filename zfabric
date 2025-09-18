@@ -109,7 +109,8 @@ def get_yt_data(
 
 def get_web_data(web_url: str):
     """Wrapper to external function that scrapes a URL and returns text"""
-    return web.WebExtractor().extract(web_url)
+    _, content = web.WebExtractor().extract(web_url)
+    return content
 
 
 def get_confluence_data(page_id: int, recursive: bool = False):
