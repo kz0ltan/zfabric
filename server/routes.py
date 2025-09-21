@@ -124,9 +124,12 @@ def register_routes(server):
         # skip saving session
         if session == "skip":
             session = None
+
         # load last session
         elif session == "last":
             session = server.session_manager.get_last_session()
+            if session is None:
+                return jsonify({"error": "No session was found in the DB"}), 400
 
         if options:
             options = json.loads(options)
