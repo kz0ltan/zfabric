@@ -7,7 +7,7 @@ from flask.logging import default_handler
 from langchain_core.messages.chat import ChatMessage
 from langchain_core.messages.utils import merge_message_runs
 from langchain_community.chat_message_histories import SQLChatMessageHistory
-from sqlalchemy import create_engine, select, distinct, MetaData, delete
+from sqlalchemy import create_engine, select, distinct, MetaData, delete, desc
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
@@ -104,7 +104,8 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(
+                distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -123,7 +124,8 @@ class SessionManager:
             stmt = delete(self.table)
 
             if sess_id != "all":
-                stmt = stmt.where(self.table.c[self.session_id_field_name] == sess_id)
+                stmt = stmt.where(
+                    self.table.c[self.session_id_field_name] == sess_id)
             result = session.execute(stmt)
             session.commit()
 
@@ -135,6 +137,26 @@ class SessionManager:
                 self.logger.info(f"No messages found in session: {sess_id}")
 
         return True
+
+    def get_last_session(self):
+        """Get the session id of the last stored message"""
+        try:
+            self._setup_direct_access()
+        except ValueError as ex:
+            self.logger.info(str(ex))
+            return False
+
+        with Session(self.db_connection) as session:
+            stmt = select(self.table.c["session_id"]).order_by(
+                desc(self.table.c["timestamp"])).limit(1)
+
+            result = session.execute(stmt)
+            result = result.scalar_one_or_none()
+
+            if not result:
+                self.logger.info(f"No sessions were found in the DB.")
+
+            return result
 
 
 class VariableHandler:
@@ -185,7 +207,8 @@ class VariableHandler:
 
             # Convert glob pattern to regex
             regex_pattern = (
-                "^" + re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".") + "$"
+                "^" + re.escape(pattern).replace(r"\*",
+                                                 ".*").replace(r"\?", ".") + "$"
             )
             return re.match(regex_pattern, key) is not None
 

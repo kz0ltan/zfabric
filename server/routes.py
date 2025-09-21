@@ -65,6 +65,10 @@ def register_routes(server):
     @server.app.route("/session/<session>", methods=["GET", "DELETE"])
     @auth_required(server)
     def get_session(session: str):
+
+        if session == "last":
+            session = server.session_manager.get_last_session()
+
         if request.method == "GET":
             return jsonify(
                 {
@@ -120,6 +124,9 @@ def register_routes(server):
         # skip saving session
         if session == "skip":
             session = None
+        # load last session
+        elif session == "last":
+            session = server.session_manager.get_last_session()
 
         if options:
             options = json.loads(options)

@@ -131,7 +131,7 @@ def read_input(
     variables: List[str] = []
 ) -> Dict[str, str]:
     """Read input from file/stdin or other sources"""
-    input_data = {"input": ""}
+    input_data = {}
 
     if files is not None and len(files) > 0:
         for file_meta in files:
@@ -647,6 +647,9 @@ def execute_command(cli_args):
         cli_args.variable
     )
 
+    if cli_args.last:
+        cli_args.session = "last"
+
     if cli_args.list:
         if cli_args.session:
             list_sessions(
@@ -908,6 +911,13 @@ def parse_cli_args(command_args=None):
         default=None,
         type=str,
         help="Session name to insert/query, use 'skip' to skip saving session",
+    )
+
+    parser.add_argument(
+        "--last",
+        default=False,
+        action="store_true",
+        help="Select the last session, equivalent to -s <last_session_name>"
     )
 
     parser.add_argument("-r", "--profile",
