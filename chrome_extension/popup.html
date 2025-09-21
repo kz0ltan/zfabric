@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 300px; padding: 10px; }
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 8px;
+      cursor: pointer;
+    }
+    #configBtn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+    }
+    /* Button feedback styles */
+    button.success {
+      color: #2e7d32 !important;
+      background-color: #c8e6c9 !important;
+    }
+    
+    button.auth-error {
+      color: #d32f2f !important;
+      background-color: #ffcdd2 !important;
+    }
+    
+    button.error {
+      color: #7b1fa2 !important;
+      background-color: #e1bee7 !important;
+    }
+    /* Ensure smooth transitions */
+    button {
+      transition: background-color 0.3s, color 0.3s;
+    }
+  </style>
+</head>
+<body>
+  <div class="button-container" id="buttons"></div>
+  <button id="configBtn">Configure Buttons</button>
+  <script src="popup.js"></script>
+</body>
+</html>

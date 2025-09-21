@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { padding: 20px; font-family: Arial, sans-serif; }
+    .button-config {
+      margin-bottom: 15px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+    }
+    input, textarea {
+      width: 100%;
+      margin: 5px 0;
+      padding: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 8px 15px;
+      margin-right: 5px;
+      cursor: pointer;
+    }
+    #saveBtn { background-color: #4CAF50; color: white; border: none; }
+    #addBtn  { background-color: #2196F3; color: white; border: none; }
+    #exportBtn { background-color: #9C27B0; color: white; border: none; }
+    #importBtn { background-color: #FF9800; color: white; border: none; }
+    .removeBtn { background-color: #f44336; color: white; border: none; }
+    .move-buttons {
+      display: flex;
+      gap: 5px;
+      margin-top: 5px;
+    }
+    .move-up, .move-down {
+      background-color: #ff9800;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+    }
+    /* New styles for the token section */
+    #authSection { margin-bottom: 20px; }
+    #authSection h2 { margin: 0 0 5px; }
+  </style>
+</head>
+<body>
+  <h1>Extension Settings</h1>
+
+  <!-- ==== Global Authorization Token ==== -->
+  <section id="authSection">
+    <h2>Authorization Token (applies to all buttons)</h2>
+    <!-- **Masked input** – type="password" -->
+    <input type="password" id="globalToken" placeholder="Enter Bearer token (optional)">
+  </section>
+
+  <!-- ==== Button configuration ==== -->
+  <h2>Button Configuration</h2>
+  <div id="configContainer"></div>
+
+  <button id="addBtn">Add Button</button>
+  <button id="saveBtn">Save Configuration</button>
+  <button id="exportBtn">Export to File</button>
+  <button id="importBtn">Import from File</button>
+
+  <!-- hidden file input used only for importing -->
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+
+  <script src="config.js"></script>
+</body>
+</html>
