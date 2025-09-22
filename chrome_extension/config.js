@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------
-   Options page – button configuration UI + global auth token
+   Options page - button configuration UI + global auth token
    -------------------------------------------------------------- */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -12,18 +12,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tokenInput      = document.getElementById('globalToken');
 
   // -----------------------------------------------------------------
-  // 1️⃣ Load stored data (buttons + token) and render UI
+  // 1 Load stored data (buttons + token) and render UI
   // -----------------------------------------------------------------
   const { buttons, authToken } = await loadAllData();
   tokenInput.value = authToken || '';
   renderConfigForm(buttons);
 
   // -----------------------------------------------------------------
-  // 2️⃣ UI event wiring
+  // 2 UI event wiring
   // -----------------------------------------------------------------
   addBtn.addEventListener('click', () => {
     const current = getFormValues();
-    current.push({ label: '', value: '' }); // token removed from per‑button objects
+    current.push({ label: '', value: '' }); // token removed from per-button objects
     renderConfigForm(current);
   });
 
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // -----------------------------------------------------------------
-  // 3️⃣ Rendering helpers (per‑button UI only)
+  // 3 Rendering helpers (per-button UI only)
   // -----------------------------------------------------------------
   function renderConfigForm(buttons) {
     configContainer.innerHTML = '';
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // -----------------------------------------------------------------
-  // 4️⃣ Form data helpers (buttons only)
+  // 4 Form data helpers (buttons only)
   // -----------------------------------------------------------------
   function getFormValues() {
     const configs = document.querySelectorAll('.button-config');
@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // -----------------------------------------------------------------
-  // 5️⃣ Chrome storage helpers (buttons + global token)
+  // 5 Chrome storage helpers (buttons + global token)
   // -----------------------------------------------------------------
   async function saveAllData({ buttons, authToken }) {
     return new Promise(resolve => {
@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // -----------------------------------------------------------------
-  // 6️⃣ Utility – safe HTML escaping
+  // 6 Utility - safe HTML escaping
   // -----------------------------------------------------------------
   function escapeHtml(text) {
     return String(text)
