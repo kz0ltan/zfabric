@@ -9,7 +9,7 @@ from anthropic import Anthropic
 from flask.logging import default_handler
 from flask import Response
 from langchain_core.messages.chat import ChatMessage, ChatMessageChunk
-from langchain.schema import get_buffer_string
+from langchain_core.messages.utils import get_buffer_string
 from groq import Groq
 import ollama
 import openai
@@ -456,7 +456,9 @@ class Generator:
                         })
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_openai(), self.logger, content_type="application/json")
+            return StreamingResponse(
+                response_stream_openai(), self.logger, content_type="application/json"
+            )
 
         if service == "groq":
             api_messages = self._groq_image_transformation(api_messages)
@@ -528,7 +530,9 @@ class Generator:
                         })
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_groq(), self.logger, content_type="application/json")
+            return StreamingResponse(
+                response_stream_groq(), self.logger, content_type="application/json"
+            )
 
         if service == "anthropic":
             api_messages = self._anthropic_image_transformation(api_messages)
@@ -625,7 +629,9 @@ class Generator:
 
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_anthropic(), self.logger, content_type="application/json")
+            return StreamingResponse(
+                response_stream_anthropic(), self.logger, content_type="application/json"
+            )
 
         if service == "ollama":
             api_messages = self._ollama_image_transformation(api_messages)
@@ -677,7 +683,9 @@ class Generator:
                     yield (json.dumps(r) + "\n")
                 self.session_manager.add_messages(session, messages)
 
-            return StreamingResponse(response_stream_ollama(), self.logger, content_type="application/json")
+            return StreamingResponse(
+                response_stream_ollama(), self.logger, content_type="application/json"
+            )
 
         raise ValueError(f"Unknown service '{service}'")
 
@@ -697,6 +705,5 @@ class StreamingResponse(Response):
         try:
             yield from self.generator
         except Exception as e:
-            self.logger.error(
-                f"Error requesting inference server: {str(e)}")
+            self.logger.error(f"Error requesting inference server: {str(e)}")
             yield json.dumps({"error": f"Error requesting inference server: {str(e)}"})
