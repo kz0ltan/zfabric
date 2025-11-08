@@ -354,8 +354,12 @@ class Generator:
         keep_alive: Optional[Union[float, str]] = None,
         model: Optional[str] = None,
         session: Optional[str] = None,
+        warnings: List[str] = None,
     ):
         """Main function, generates text based on messages"""
+        if not warnings:
+            warnings = []
+
         api_messages = self._chatmessages_to_json(messages)
         profile_name, profile = self._get_profile(profile_name)
 
@@ -423,6 +427,9 @@ class Generator:
                                 )
                             if chunk.choices[0].finish_reason == "stop":
                                 ret["last_chunk"] = True
+                        if len(warnings):
+                            ret["warnings"] = copy.copy(warnings)
+                            warnings.clear()
                         if chunk.usage:
                             ret["usage"] = {
                                 "prompt_tokens": chunk.usage.prompt_tokens,
@@ -453,11 +460,12 @@ class Generator:
                             },
                             "ignored_options": ",".join(ignored_options),
                             "session": session,
+                            "warnings": copy.copy(warnings),
                         })
                 self.session_manager.add_messages(session, messages)
 
             return StreamingResponse(
-                response_stream_openai(), self.logger, content_type="application/json"
+                response_stream_openai(), self.logger, warnings, content_type="application/json"
             )
 
         if service == "groq":
@@ -497,6 +505,11 @@ class Generator:
                                     )
                             if chunk.choices[0].finish_reason == "stop":
                                 ret["last_chunk"] = True
+
+                        if len(warnings):
+                            ret["warnings"] = copy.copy(warnings)
+                            warnings.clear()
+
                         if chunk.choices[0].finish_reason:
                             ret["usage"] = {
                                 "prompt_tokens": chunk.x_groq.usage.prompt_tokens,
@@ -527,11 +540,12 @@ class Generator:
                             },
                             "ignored_options": ",".join(ignored_options),
                             "session": session,
+                            "warnings": copy.copy(warnings),
                         })
                 self.session_manager.add_messages(session, messages)
 
             return StreamingResponse(
-                response_stream_groq(), self.logger, content_type="application/json"
+                response_stream_groq(), self.logger, warnings, content_type="application/json"
             )
 
         if service == "anthropic":
@@ -584,6 +598,10 @@ class Generator:
                         elif chunk.type == "message_delta":
                             usage["output_tokens"] += chunk.usage.output_tokens
 
+                        if len(warnings):
+                            ret["warnings"] = copy.copy(warnings)
+                            warnings.clear()
+
                         if len(ret["response"]) > 0:
                             yield json.dumps(ret) + "\n"
                             ret["response"] = ""
@@ -625,12 +643,14 @@ class Generator:
                             ret["usage"]["input_tokens"] = chunk.usage.input_tokens
                             ret["usage"]["output_tokens"] = chunk.usage.output_tokens
 
+                    ret["warnings"] = copy.copy(warnings)
+
                     yield json.dumps(ret) + "\n"
 
                 self.session_manager.add_messages(session, messages)
 
             return StreamingResponse(
-                response_stream_anthropic(), self.logger, content_type="application/json"
+                response_stream_anthropic(), self.logger, warnings, content_type="application/json"
             )
 
         if service == "ollama":
@@ -640,7 +660,6 @@ class Generator:
             # reload the model if a different ctx size is provided :/
             # The API does not allow to query loaded model's context size
 
-            warnings = []
             if "num_ctx" not in options or options["num_ctx"] is None:
                 warnings.append(
                     "num_ctx not set, falling back to Ollama default!")
@@ -684,7 +703,7 @@ class Generator:
                 self.session_manager.add_messages(session, messages)
 
             return StreamingResponse(
-                response_stream_ollama(), self.logger, content_type="application/json"
+                response_stream_ollama(), self.logger, warnings, content_type="application/json"
             )
 
         raise ValueError(f"Unknown service '{service}'")
@@ -696,9 +715,10 @@ class StreamingResponse(Response):
     so Flask's error handlers are not catching exceptions returned by Ollama for example
     """
 
-    def __init__(self, generator, logger, *args, **kwargs):
+    def __init__(self, generator, logger, warnings, *args, **kwargs):
         self.generator = generator
         self.logger = logger
+        self.warnings = warnings
         super().__init__(self._stream(), *args, **kwargs)
 
     def _stream(self):
@@ -706,4 +726,7 @@ class StreamingResponse(Response):
             yield from self.generator
         except Exception as e:
             self.logger.error(f"Error requesting inference server: {str(e)}")
-            yield json.dumps({"error": f"Error requesting inference server: {str(e)}"})
+            yield json.dumps({
+                "error": f"Error requesting inference server: {str(e)}",
+                "warnings": self.warnings,
+            })

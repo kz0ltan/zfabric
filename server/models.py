@@ -23,13 +23,9 @@ class SessionManager:
     """
 
     def __init__(self, config: Dict[Any, Any]):
-        self.db_path = config.get(
-            "sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3"
-        )
+        self.db_path = config.get("sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3")
         self.table_name = config.get("sqlite3_table_name", "message_store")
-        self.session_id_field_name = config.get(
-            "sqlite3_session_id_field_name", "session_id"
-        )
+        self.session_id_field_name = config.get("sqlite3_session_id_field_name", "session_id")
         self._db_connection = None
         self.metadata = None
         self.table = None
@@ -85,9 +81,7 @@ class SessionManager:
             custom_message_converter=ExMessageConverter(self.table_name),
         )
 
-    def add_messages(
-        self, sess_id: str, messages: List[ChatMessage], merge: bool = True
-    ):
+    def add_messages(self, sess_id: str, messages: List[ChatMessage], merge: bool = True):
         """Store new messages in a session"""
         if sess_id is None:
             return
@@ -104,8 +98,7 @@ class SessionManager:
             return []
 
         with Session(self.db_connection) as session:
-            stmt: Select = select(
-                distinct(self.table.c[self.session_id_field_name]))
+            stmt: Select = select(distinct(self.table.c[self.session_id_field_name]))
             result = session.execute(stmt)
 
             session_ids = [row[0] for row in result]
@@ -124,15 +117,12 @@ class SessionManager:
             stmt = delete(self.table)
 
             if sess_id != "all":
-                stmt = stmt.where(
-                    self.table.c[self.session_id_field_name] == sess_id)
+                stmt = stmt.where(self.table.c[self.session_id_field_name] == sess_id)
             result = session.execute(stmt)
             session.commit()
 
             if result.rowcount > 0:
-                self.logger.info(
-                    f"Deleted {result.rowcount} messages from session: {sess_id}"
-                )
+                self.logger.info(f"Deleted {result.rowcount} messages from session: {sess_id}")
             else:
                 self.logger.info(f"No messages found in session: {sess_id}")
 
@@ -147,8 +137,11 @@ class SessionManager:
             return False
 
         with Session(self.db_connection) as session:
-            stmt = select(self.table.c["session_id"]).order_by(
-                desc(self.table.c["timestamp"])).limit(1)
+            stmt = (
+                select(self.table.c["session_id"])
+                .order_by(desc(self.table.c["timestamp"]))
+                .limit(1)
+            )
 
             result = session.execute(stmt)
             result = result.scalar_one_or_none()
@@ -189,9 +182,7 @@ class VariableHandler:
 
         return data["input"]
 
-    def insert_data_into_template_with_globbing(
-        self, template: str, data: Dict[str, str]
-    ) -> str:
+    def insert_data_into_template_with_globbing(self, template: str, data: Dict[str, str]) -> str:
         """
         Replace {{  }} expressions in template from data[] using regular expressions.
         Replaced keys should be deleted from data.
@@ -206,13 +197,11 @@ class VariableHandler:
                 return False
 
             # Convert glob pattern to regex
-            regex_pattern = (
-                "^" + re.escape(pattern).replace(r"\*",
-                                                 ".*").replace(r"\?", ".") + "$"
-            )
+            regex_pattern = "^" + re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".") + "$"
             return re.match(regex_pattern, key) is not None
 
         def replace_match(match):
+            # this returns only the matched key, without {{ and }}
             glob_key = match.group(1)
             matched_values = []
 

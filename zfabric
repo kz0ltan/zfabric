@@ -478,6 +478,7 @@ def query_server(
         "no_think": qparams.get("no_think", args.no_think),
     }
     if not len(post_data) > 0 and not args.delete:
+        print("No input data received, anything you want to add to the prompt?")
         post_data["input"] = read_cli_input()
 
     while True:

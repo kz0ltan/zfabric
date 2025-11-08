@@ -35,13 +35,9 @@ def register_routes(server):
     @server.app.route("/patterns", methods=["GET"])
     @auth_required(server)
     def list_patterns():
-        patterns = itertools.chain.from_iterable(
-            [
-                os.listdir(ppath)
-                for ppath in server.config["pattern_paths"]
-                if os.path.isdir(ppath)
-            ]
-        )
+        patterns = itertools.chain.from_iterable([
+            os.listdir(ppath) for ppath in server.config["pattern_paths"] if os.path.isdir(ppath)
+        ])
         return jsonify({"response": list(patterns)})
 
     @server.app.route("/contexts", methods=["GET"])
@@ -65,19 +61,16 @@ def register_routes(server):
     @server.app.route("/session/<session>", methods=["GET", "DELETE"])
     @auth_required(server)
     def get_session(session: str):
-
         if session == "last":
             session = server.session_manager.get_last_session()
 
         if request.method == "GET":
-            return jsonify(
-                {
-                    "response": [
-                        message_to_dict(msg)
-                        for msg in server.session_manager.get_session(session).messages
-                    ]
-                }
-            )
+            return jsonify({
+                "response": [
+                    message_to_dict(msg)
+                    for msg in server.session_manager.get_session(session).messages
+                ]
+            })
 
         if request.method == "DELETE":
             server.session_manager.delete_session(session)
@@ -97,8 +90,7 @@ def register_routes(server):
         """
 
         server.app.logger.debug(
-            "Milling request received.\n\tArguments: " + str(request.args)
-        )
+            "Milling request received.\n\tArguments: " + str(request.args))
 
         profile_name = request.args.get("profile", None)
         model = request.args.get("model", None)
@@ -117,8 +109,8 @@ def register_routes(server):
         keep_alive = request.args.get("keep_alive", default=None)
         session = request.args.get(
             "session",
-            default=str(pattern)
-            + datetime.datetime.today().strftime("-%Y-%m-%d_%H-%M-%S-%f"),
+            default=str(
+                pattern) + datetime.datetime.today().strftime("-%Y-%m-%d_%H-%M-%S-%f"),
             # + str(generate_random_number(5)),
         )
         # skip saving session
@@ -135,9 +127,8 @@ def register_routes(server):
             options = json.loads(options)
 
         contexts: List[str] = (
-            request.args.get("contexts", "").split(",")
-            if request.args.get("contexts", "")
-            else []
+            request.args.get("contexts", "").split(
+                ",") if request.args.get("contexts", "") else []
         )
 
         data = request.get_json()
@@ -151,6 +142,7 @@ def register_routes(server):
             input_attachments = data["attachments"]
             del data["attachments"]
 
+        warnings = []
         messages = []
         new_messages = []
         user_prompt = ""
@@ -196,21 +188,17 @@ def register_routes(server):
                     for cpath in server.config["context_paths"]:
                         context_path = Path(cpath) / (context + ".md")
                         if context_path.exists():
-                            data[tag if tag else "context_" + context] = load_file(
-                                context_path
-                            )
+                            data[tag if tag else "context_" +
+                                 context] = load_file(context_path)
                             break
                         if cpath == server.config["context_paths"][-1]:
-                            return jsonify(
-                                {"error": f"Context not found: {context}"}
-                            ), 400
+                            return jsonify({"error": f"Context not found: {context}"}), 400
 
             # load system prompt; system prompt only works in empty (new) sessions
             if len(messages) == 0:
                 system_prompt = load_file(pattern_path / "system.md", "")
                 system_prompt = server.variable_handler.resolve(
-                    system_prompt, variables, data
-                )
+                    system_prompt, variables, data)
 
                 if len(system_prompt):
                     # Build the API call
@@ -239,19 +227,20 @@ def register_routes(server):
 
         content = []
         if len(user_prompt):
-            content.append(
-                {
-                    "type": "text",
-                    "text": user_prompt,
-                }
+            content.append({
+                "type": "text",
+                "text": user_prompt,
+            })
+        else:
+            warnings.append(
+                "User prompt length is zero, sending a single "
+                "system promp might be illegal for the provider..."
             )
         for input_attachment in input_attachments:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
-                }
-            )
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{input_attachment}"},
+            })
         if len(content) > 0:
             user_message = ChatMessage(
                 content=content,
@@ -275,4 +264,5 @@ def register_routes(server):
             keep_alive=keep_alive,
             model=model,
             session=session,
+            warnings=warnings,
         )
