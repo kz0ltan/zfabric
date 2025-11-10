@@ -390,9 +390,10 @@ class Generator:
         if service in ("openai", "azure_openai"):
             translated_options, ignored_options = self.translate_options(
                 options)
-            ignored_message = f"Ignored options in the request: {ignored_options}"
-            self.logger.debug(ignored_message)
-            warnings.append(ignored_message)
+            if len(ignored_options):
+                ignored_message = f"Ignored options in the request: {ignored_options}"
+                self.logger.debug(ignored_message)
+                warnings.append(ignored_message)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -473,9 +474,10 @@ class Generator:
             api_messages = self._groq_image_transformation(api_messages)
             translated_options, ignored_options = self.translate_options(
                 options)
-            ignored_message = f"Ignored options in the request: {ignored_options}"
-            self.logger.debug(ignored_message)
-            warnings.append(ignored_message)
+            if len(ignored_options):
+                ignored_message = f"Ignored options in the request: {ignored_options}"
+                self.logger.debug(ignored_message)
+                warnings.append(ignored_message)
 
             def response_stream_groq():
                 messages = []
