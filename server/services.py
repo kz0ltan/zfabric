@@ -390,8 +390,9 @@ class Generator:
         if service in ("openai", "azure_openai"):
             translated_options, ignored_options = self.translate_options(
                 options)
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            ignored_message = f"Ignored options in the request: {ignored_options}"
+            self.logger.debug(ignored_message)
+            warnings.append(ignored_message)
 
             if service == "openai":
                 generate = self._generate_openai
@@ -472,8 +473,9 @@ class Generator:
             api_messages = self._groq_image_transformation(api_messages)
             translated_options, ignored_options = self.translate_options(
                 options)
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            ignored_message = f"Ignored options in the request: {ignored_options}"
+            self.logger.debug(ignored_message)
+            warnings.append(ignored_message)
 
             def response_stream_groq():
                 messages = []
@@ -553,13 +555,15 @@ class Generator:
             translated_options, ignored_options = self.translate_options(
                 options, flavor="anthropic"
             )
-            self.logger.debug(
-                "Ignored options in the request: %s", ignored_options)
+            ignored_message = f"Ignored options in the request: {ignored_options}"
+            self.logger.debug(ignored_message)
+            warnings.append(ignored_message)
 
             def response_stream_anthropic():
                 messages = []
                 if "max_tokens" not in options:
                     options["max_tokens"] = 4096
+                    warnings.append("max_tokens set to default 4096")
                 if stream:
                     ret = {"response": "", "session": session}
                     usage = {}

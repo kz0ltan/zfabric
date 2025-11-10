@@ -140,7 +140,7 @@ def read_input(
             else:
                 tag = "file_input"
                 path = file_meta
-            path = os.expanduser(path)
+            path = os.path.expanduser(path)
             with open(path, "r", encoding="utf-8") as f_desc:
                 input_data[tag] = f_desc.read()
 
@@ -341,7 +341,7 @@ def write_alternative_outputs(
         return
 
     if ofile:
-        path = os.expanduser(ofile)
+        path = os.path.expanduser(ofile)
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
 
