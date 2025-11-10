@@ -555,9 +555,10 @@ class Generator:
             translated_options, ignored_options = self.translate_options(
                 options, flavor="anthropic"
             )
-            ignored_message = f"Ignored options in the request: {ignored_options}"
-            self.logger.debug(ignored_message)
-            warnings.append(ignored_message)
+            if len(ignored_options):
+                ignored_message = f"Ignored options in the request: {ignored_options}"
+                self.logger.debug(ignored_message)
+                warnings.append(ignored_message)
 
             if "max_tokens" not in translated_options:
                 translated_options["max_tokens"] = 4096
@@ -566,8 +567,6 @@ class Generator:
             def response_stream_anthropic():
                 messages = []
                 if stream:
-                    ret = {"response": "", "session": session}
-                    usage = {}
                     for chunk in self._generate_anthropic(
                         profile_name,
                         model,
@@ -575,6 +574,8 @@ class Generator:
                         stream=stream,
                         options=translated_options,
                     ):
+                        usage = {}
+                        ret = {"response": "", "session": session}
                         if chunk.type == "content_block_delta":
                             ret["response"] = chunk.delta.text
                             messages.append(
@@ -617,7 +618,6 @@ class Generator:
                             yield json.dumps(ret) + "\n"
 
                 else:
-                    ret = {"response": "", "usage": {}, "session": session}
                     for chunk in self._generate_anthropic(
                         profile_name,
                         model,
@@ -625,6 +625,7 @@ class Generator:
                         stream=stream,
                         options=translated_options,
                     ):
+                        ret = {"response": "", "usage": {}, "session": session}
                         if chunk.type == "message":
                             ret["response"] += chunk.content[0].text
                             messages.append(
