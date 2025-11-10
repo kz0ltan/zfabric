@@ -420,7 +420,7 @@ class Generator:
                                         role="assistant",
                                         response_metadata={
                                             "model": model,
-                                            "options": options,
+                                            "options": translated_options,
                                             "session": session,
                                             "timestamp": timestamp,
                                         },
@@ -499,7 +499,7 @@ class Generator:
                                             role="assistant",
                                             response_metadata={
                                                 "model": model,
-                                                "options": options,
+                                                "options": translated_options,
                                                 "session": session,
                                                 "timestamp": timestamp,
                                             },
@@ -572,7 +572,7 @@ class Generator:
                         model,
                         api_messages,
                         stream=stream,
-                        options=options,
+                        options=translated_options,
                     ):
                         if chunk.type == "content_block_delta":
                             ret["response"] = chunk.delta.text
@@ -582,7 +582,7 @@ class Generator:
                                     role="assistant",
                                     response_metadata={
                                         "model": model,
-                                        "options": options,
+                                        "options": translated_options,
                                         "session": session,
                                         "timestamp": timestamp,
                                     },
