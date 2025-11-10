@@ -446,7 +446,7 @@ class Generator:
                                 role="assistant",
                                 response_metadata={
                                     "model": model,
-                                    "options": options,
+                                    "options": translated_options,
                                     "session": session,
                                     "timestamp": timestamp,
                                 },
@@ -527,7 +527,7 @@ class Generator:
                                 role="assistant",
                                 response_metadata={
                                     "model": model,
-                                    "options": options,
+                                    "options": translated_options,
                                     "session": session,
                                     "timestamp": timestamp,
                                 },
@@ -559,11 +559,12 @@ class Generator:
             self.logger.debug(ignored_message)
             warnings.append(ignored_message)
 
+            if "max_tokens" not in translated_options:
+                translated_options["max_tokens"] = 4096
+                warnings.append("max_tokens set to default 4096")
+
             def response_stream_anthropic():
                 messages = []
-                if "max_tokens" not in options:
-                    options["max_tokens"] = 4096
-                    warnings.append("max_tokens set to default 4096")
                 if stream:
                     ret = {"response": "", "session": session}
                     usage = {}
@@ -622,7 +623,7 @@ class Generator:
                         model,
                         api_messages,
                         stream=stream,
-                        options=options,
+                        options=translated_options,
                     ):
                         if chunk.type == "message":
                             ret["response"] += chunk.content[0].text
@@ -632,7 +633,7 @@ class Generator:
                                     role="assistant",
                                     response_metadata={
                                         "model": model,
-                                        "options": options,
+                                        "options": translated_options,
                                         "session": session,
                                         "timestamp": timestamp,
                                     },
