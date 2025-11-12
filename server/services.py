@@ -131,7 +131,6 @@ class Generator:
         **kwargs,
     ):
         client = self._get_client(profile_name)
-        breakpoint()
         response = client.chat.completions.create(
             model=model,
             messages=messages,
