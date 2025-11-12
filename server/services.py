@@ -131,6 +131,7 @@ class Generator:
         **kwargs,
     ):
         client = self._get_client(profile_name)
+        breakpoint()
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -244,7 +245,7 @@ class Generator:
         if flavor == "openai":
             mapping = {  # "ollama_name": "openai_name"
                 "temperature": "temperature",
-                "num_predict": "max_completion_tokens",
+                "num_predict": "max_tokens",
                 "top_p": "top_p",
                 "presence_penalty": "presence_penalty",
                 "frequency_penalty": "frequency_penalty",
