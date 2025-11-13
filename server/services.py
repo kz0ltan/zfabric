@@ -614,6 +614,9 @@ class Generator:
                             yield json.dumps(ret) + "\n"
                             ret["response"] = ""
 
+                        elif chunk.type == "message_start":
+                            yield json.dumps(ret) + "\n"
+
                         elif chunk.type == "message_stop":
                             del ret["response"]
                             ret["usage"] = usage
