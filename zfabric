@@ -37,8 +37,7 @@ BOLD_END = "\033[0m"
 def validate_key_value(arg):
     """Simple test to check if key-value pair is readable"""
     if "=" not in arg:
-        raise argparse.ArgumentTypeError(
-            f"Argument '{arg}' is not in key=value format")
+        raise argparse.ArgumentTypeError(f"Argument '{arg}' is not in key=value format")
     return arg
 
 
@@ -117,7 +116,9 @@ def get_confluence_data(page_id: int, recursive: bool = False):
     """Wrapper to external function that downloads Confluence page data"""
     client = confluence.ConfluenceClient()
     contents = client.get_page_by_id(page_id, recursive=recursive)
-    return "\n\n---------\n\n".join([content["body"]["view"]["value"] for content in contents])
+    return "\n\n---------\n\n".join(
+        [content["body"]["view"]["value"] for content in contents]
+    )
 
 
 def read_input(
@@ -161,8 +162,7 @@ def read_input(
         input_data["attachments"] = []
         for attachment in attachments:
             input_data["attachments"].append(
-                base64.b64encode(
-                    load_file(attachment, type="rb")).decode("ascii")
+                base64.b64encode(load_file(attachment, type="rb")).decode("ascii")
             )
     # if attachment:
     #    input_data["attachment"] = base64.b64encode(
@@ -171,7 +171,8 @@ def read_input(
 
     if confluence_page_id:
         input_data["confl_input"] = get_confluence_data(
-            confluence_page_id, recursive=recursive)
+            confluence_page_id, recursive=recursive
+        )
 
     d_variables = parse_variables(variables)
     if len(d_variables):
@@ -321,8 +322,7 @@ def print_response(
         print_error(response_json)
         print_warnings(response_json)
 
-    write_alternative_outputs(
-        response_text, ccopy=ccopy, ofile=ofile, joplin=joplin)
+    write_alternative_outputs(response_text, ccopy=ccopy, ofile=ofile, joplin=joplin)
 
     if "session" in response_json:
         return response_json["session"]
@@ -354,7 +354,9 @@ def write_alternative_outputs(
         joplin_save.create_note(parent_id, title, text)
 
 
-def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None, joplin: bool = False):
+def print_str(
+    output: str, ccopy: bool = False, ofile: Optional[str] = None, joplin: bool = False
+):
     """Print string to stdout and optionally:
     1. save to file
     2. copy to clipboard
@@ -366,7 +368,10 @@ def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None, jop
 
 
 def print_list(
-    response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None, joplin: bool = False
+    response_list: List[str],
+    ccopy: bool = False,
+    ofile: Optional[str] = None,
+    joplin: bool = False,
 ):
     """Print list of strings using print_str"""
 
@@ -429,12 +434,14 @@ def list_sessions(
     print_error(resp)
     resp_json = resp.json()
     if resp.ok and "response" in resp_json:
-        print_chat(resp_json["response"], ofile=ofile,
-                   ccopy=ccopy, joplin=joplin)
+        print_chat(resp_json["response"], ofile=ofile, ccopy=ccopy, joplin=joplin)
 
 
 def list_objects(
-    object_name: str, ccopy: bool = False, ofile: Optional[str] = None, joplin: bool = False
+    object_name: str,
+    ccopy: bool = False,
+    ofile: Optional[str] = None,
+    joplin: bool = False,
 ):
     """Print objects defined by -l cli argument"""
     resp = send_query(base_url + "/" + object_name)
@@ -443,8 +450,7 @@ def list_objects(
     print_error(resp)
     resp_json = resp.json()
     if resp.ok and "response" in resp_json:
-        print_list(resp_json["response"], ccopy=ccopy,
-                   ofile=ofile, joplin=joplin)
+        print_list(resp_json["response"], ccopy=ccopy, ofile=ofile, joplin=joplin)
 
 
 def read_cli_input():
@@ -482,8 +488,9 @@ def query_server(
         post_data["input"] = read_cli_input()
 
     while True:
-        resp = send_query(qry_str, params=query_params,
-                          post_data=post_data, method=method)
+        resp = send_query(
+            qry_str, params=query_params, post_data=post_data, method=method
+        )
 
         session_id = print_response(
             resp,
@@ -512,9 +519,14 @@ def get_yt_options(args: argparse.Namespace):
     Enabled transcripts if everything else is off
     """
 
-    # enable transcripts and metadata if everything is off
     transcripts = args.yt_transcripts
     metadata = args.yt_metadata
+    comments = args.yt_comments
+
+    if not args.yt and (transcripts or metadata or comments):
+        print("Warning: yt option is set without --yt provided")
+
+    # enable transcripts and metadata if everything is off
     if not (args.yt_metadata or args.yt_comments or args.yt_transcripts):
         transcripts = True
         # metadata = True
@@ -555,8 +567,7 @@ class CommandHandler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers",
-                         "Authorization, Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
         self.end_headers()
 
     def do_POST(self):
@@ -572,7 +583,8 @@ class CommandHandler(BaseHTTPRequestHandler):
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
                     self.wfile.write(
-                        b'{"error": "Missing or invalid Authorization header"}')
+                        b'{"error": "Missing or invalid Authorization header"}'
+                    )
                     return
                 provided_token = auth_header.split(" ")[1]
                 if provided_token != auth_token:
@@ -580,8 +592,7 @@ class CommandHandler(BaseHTTPRequestHandler):
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
-                    self.wfile.write(
-                        b'{"error": "Invalid authentication token"}')
+                    self.wfile.write(b'{"error": "Invalid authentication token"}')
                     return
 
             # Get command from request body
@@ -591,8 +602,7 @@ class CommandHandler(BaseHTTPRequestHandler):
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(
-                    b'{"error": "Missing command in request body"}')
+                self.wfile.write(b'{"error": "Missing command in request body"}')
                 return
 
             command_line = self.rfile.read(content_length).decode("utf-8")
@@ -605,8 +615,9 @@ class CommandHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.flush()
 
-            threading.Thread(target=self._execute_command_async,
-                             args=(command_line,)).start()
+            threading.Thread(
+                target=self._execute_command_async, args=(command_line,)
+            ).start()
 
     def _execute_command_async(self, command_line: str):
         """Execute the command in a separate thread to avoid blocking"""
@@ -664,7 +675,10 @@ def execute_command(cli_args):
             )
         else:
             list_objects(
-                cli_args.list, ccopy=cli_args.copy, ofile=cli_args.ofile, joplin=cli_args.joplin
+                cli_args.list,
+                ccopy=cli_args.copy,
+                ofile=cli_args.ofile,
+                joplin=cli_args.joplin,
             )
     elif cli_args.delete and cli_args.session:
         query_server(
@@ -675,11 +689,9 @@ def execute_command(cli_args):
             method="DELETE",
         )
     elif cli_args.tokens:
-        query_server(base_url + "/tokens", cli_args,
-                     data, qparams={"stream": False})
+        query_server(base_url + "/tokens", cli_args, data, qparams={"stream": False})
     elif cli_args.pattern:
-        query_server(base_url + "/patterns/" +
-                     cli_args.pattern, cli_args, data)
+        query_server(base_url + "/patterns/" + cli_args.pattern, cli_args, data)
     elif (len(data) > 0 or cli_args.chat) and cli_args.session:
         query_server(base_url + "/session", cli_args, data)
     else:
@@ -687,8 +699,9 @@ def execute_command(cli_args):
         for k, v in data.items():
             if len(v):
                 output += "### " + k + "\n" + str(v) + "\n"
-        print_str(output, ccopy=cli_args.copy,
-                  ofile=cli_args.ofile, joplin=cli_args.joplin)
+        print_str(
+            output, ccopy=cli_args.copy, ofile=cli_args.ofile, joplin=cli_args.joplin
+        )
 
 
 def start_http_listener(auth_token: Optional[str] = None):
@@ -761,7 +774,11 @@ def parse_cli_args(command_args=None):
         "-o", "--ofile", type=file_not_exists, default=None, help="Output file path"
     )
     parser.add_argument(
-        "-j", "--joplin", default=False, action="store_true", help="Send output to Joplin"
+        "-j",
+        "--joplin",
+        default=False,
+        action="store_true",
+        help="Send output to Joplin",
     )
     parser.add_argument(
         "-c",
@@ -924,8 +941,9 @@ def parse_cli_args(command_args=None):
         help="Select the last session, equivalent to -s <last_session_name>",
     )
 
-    parser.add_argument("-r", "--profile",
-                        help="Profile to use (defined in server config.json)")
+    parser.add_argument(
+        "-r", "--profile", help="Profile to use (defined in server config.json)"
+    )
     parser.add_argument(
         "--no-stream",
         default=False,
