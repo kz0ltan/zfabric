@@ -362,7 +362,10 @@ def print_str(output: str, ccopy: bool = False, ofile: Optional[str] = None, jop
 
 
 def print_list(
-    response_list: List[str], ccopy: bool = False, ofile: Optional[str] = None, joplin: bool = False
+    response_list: List[str],
+    ccopy: bool = False,
+    ofile: Optional[str] = None,
+    joplin: bool = False,
 ):
     """Print list of strings using print_str"""
 
@@ -429,7 +432,10 @@ def list_sessions(
 
 
 def list_objects(
-    object_name: str, ccopy: bool = False, ofile: Optional[str] = None, joplin: bool = False
+    object_name: str,
+    ccopy: bool = False,
+    ofile: Optional[str] = None,
+    joplin: bool = False,
 ):
     """Print objects defined by -l cli argument"""
     resp = send_query(base_url + "/" + object_name)
@@ -505,9 +511,14 @@ def get_yt_options(args: argparse.Namespace):
     Enabled transcripts if everything else is off
     """
 
-    # enable transcripts and metadata if everything is off
     transcripts = args.yt_transcripts
     metadata = args.yt_metadata
+    comments = args.yt_comments
+
+    if not args.yt and (transcripts or metadata or comments):
+        print("Warning: yt option is set without --yt provided")
+
+    # enable transcripts and metadata if everything is off
     if not (args.yt_metadata or args.yt_comments or args.yt_transcripts):
         transcripts = True
         # metadata = True
@@ -652,7 +663,10 @@ def execute_command(cli_args):
             )
         else:
             list_objects(
-                cli_args.list, ccopy=cli_args.copy, ofile=cli_args.ofile, joplin=cli_args.joplin
+                cli_args.list,
+                ccopy=cli_args.copy,
+                ofile=cli_args.ofile,
+                joplin=cli_args.joplin,
             )
     elif cli_args.delete and cli_args.session:
         query_server(
@@ -746,7 +760,11 @@ def parse_cli_args(command_args=None):
         "-o", "--ofile", type=file_not_exists, default=None, help="Output file path"
     )
     parser.add_argument(
-        "-j", "--joplin", default=False, action="store_true", help="Send output to Joplin"
+        "-j",
+        "--joplin",
+        default=False,
+        action="store_true",
+        help="Send output to Joplin",
     )
     parser.add_argument(
         "-c",
