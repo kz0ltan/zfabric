@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 import pyperclip
 import requests
 
+from tools.extract.reddit import Reddit
 from tools.extract import yt
 from tools.extract import web
 from tools.extract import confluence
@@ -106,6 +107,14 @@ def get_yt_data(
     raise ValueError("No data received from Youtube")
 
 
+def get_reddit_data(reddit_url: str):
+    r = Reddit()
+    submission = r.get_submission(reddit_url)
+    post_dict = r.build_post_dict(submission)
+    comment_dict = r.comment_forest_to_dict(submission.comments)
+    return {"post": post_dict, "comments": comment_dict}
+
+
 def get_web_data(web_url: str):
     """Wrapper to external function that scrapes a URL and returns text"""
     _, content = web.WebExtractor().extract(web_url)
@@ -123,6 +132,7 @@ def read_input(
     files: Optional[List[str]] = None,
     yt_url: Optional[str] = None,
     yt_options: Optional[Dict[str, bool]] = None,
+    reddit_url: Optional[str] = None,
     web_url: Optional[str] = None,
     attachments: List[str] = [],
     confluence_page_id: Optional[int] = None,
@@ -151,6 +161,10 @@ def read_input(
             yt_options = {}
         yt_data = get_yt_data(yt_url, **yt_options)
         input_data["yt_input"] = json.dumps(yt_data)
+
+    if reddit_url:
+        reddit_data = get_reddit_data(reddit_url)
+        input_data["reddit_input"] = json.dumps(reddit_data)
 
     if web_url:
         web_data = get_web_data(web_url)
@@ -640,14 +654,15 @@ def execute_command(cli_args):
         sys.exit(0)
 
     data = read_input(
-        cli_args.ifile,
-        cli_args.yt,
-        get_yt_options(cli_args),
-        cli_args.url,
-        cli_args.attachment,
-        cli_args.cnfl,
-        cli_args.cnfl_recursive,
-        cli_args.variable,
+        files=cli_args.ifile,
+        yt_url=cli_args.yt,
+        yt_options=get_yt_options(cli_args),
+        reddit_url=cli_args.reddit,
+        web_url=cli_args.url,
+        attachments=cli_args.attachment,
+        confluence_page_id=cli_args.cnfl,
+        recursive=cli_args.cnfl_recursive,
+        variables=cli_args.variable,
     )
 
     if cli_args.last:
@@ -810,6 +825,12 @@ def parse_cli_args(command_args=None):
         default=False,
         action="store_true",
         help="Download video comments",
+    )
+    parser.add_argument(
+        "--reddit",
+        type=str,
+        default=None,
+        help="Reddit URL to download post and comments and use it as {{input}} or {{reddit_input}}",
     )
     parser.add_argument(
         "-u",
