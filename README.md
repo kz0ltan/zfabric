@@ -2,7 +2,7 @@
 
 This is an alternative implementation of [Fabric](https://github.com/danielmiessler/fabric) by Daniel Miessler.
 
-The tool yt.py was directly copied from Fabric.
+The tool yt.py was directly copied from Fabric (and modified since).
 
 ## Installation
 

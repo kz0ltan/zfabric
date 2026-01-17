@@ -8,24 +8,18 @@ import datetime
 import json
 import os
 import select
+import shlex
+import shutil
 import signal
 import sys
-from typing import List, Dict, Optional, Any, Union
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import shutil
-import shlex
 import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Dict, List, Optional, Union
 
-from dotenv import load_dotenv
-import pyperclip
 import requests
+from dotenv import load_dotenv
 
-from tools.extract.reddit import Reddit
-from tools.extract import yt
-from tools.extract import web
-from tools.extract import confluence
-from tools.save import joplin as joplin_save
-from server.helpers import load_file
+# from server.lib.servicekit.utils import load_file
 
 ENV_PATH = "~/.config/zfabric/.env"
 TIMEOUT = None
@@ -45,6 +39,17 @@ def validate_key_value(arg):
 def parse_variables(variables_to_parse: List[str]):
     """Return a dict of variables"""
     return dict([v.split("=") for v in variables_to_parse])
+
+
+def load_file(path: str, default: Any = None, type: str = "r"):
+    """Load a file or raise an exception/return default."""
+    try:
+        with open(path, type, encoding="utf-8" if type == "r" else None) as fp:
+            return fp.read()
+    except FileNotFoundError as e:
+        if default is None:
+            raise e
+        return default
 
 
 def load_variable_files(variables: Dict[str, str]):
@@ -99,6 +104,8 @@ def get_yt_data(
             "lang": "en",
         },
     )()
+    from tools.extract import yt
+
     ret = yt.main_function(yt_url, options, return_only=True)
 
     if ret:
@@ -108,6 +115,8 @@ def get_yt_data(
 
 
 def get_reddit_data(reddit_url: str):
+    from tools.extract.reddit import Reddit
+
     r = Reddit()
     submission = r.get_submission(reddit_url)
     post_dict = r.build_post_dict(submission)
@@ -117,12 +126,16 @@ def get_reddit_data(reddit_url: str):
 
 def get_web_data(web_url: str):
     """Wrapper to external function that scrapes a URL and returns text"""
+    from tools.extract import web
+
     _, content = web.WebExtractor().extract(web_url)
     return content
 
 
 def get_confluence_data(page_id: int, recursive: bool = False):
     """Wrapper to external function that downloads Confluence page data"""
+    from tools.extract import confluence
+
     client = confluence.ConfluenceClient()
     contents = client.get_page_by_id(page_id, recursive=recursive)
     return "\n\n---------\n\n".join([content["body"]["view"]["value"] for content in contents])
@@ -356,9 +369,13 @@ def write_alternative_outputs(
             f.write(text)
 
     if ccopy:
+        import pyperclip
+
         pyperclip.copy(text)
 
     if joplin:
+        from tools.save import joplin as joplin_save
+
         parent_id = os.getenv("JOPLIN_DEFAULT_FOLDER")
         title = datetime.datetime.now().strftime("Imported - %y-%m-%d_%H-%M-%S")
         joplin_save.create_note(parent_id, title, text)
@@ -485,7 +502,6 @@ def query_server(
         # "variables": qparams.get("variable", args.variable),
         "model": qparams.get("model", args.model),
         "options": qparams.get("options", json.dumps(set_options(args))),
-        "keep_alive": qparams.get("keep_alive", args.keepalive),
         "stream": qparams.get("stream", not args.no_stream),
         "session": qparams.get("session", args.session),
         "contexts": ",".join(qparams.get("context", args.context)),
@@ -919,12 +935,6 @@ def parse_cli_args(command_args=None):
         help="Positive values penalize new tokens based on whether they "
         "appear in the text so far, increasing the model's likelihood to talk "
         "about new topics.",
-    )
-    parser.add_argument(
-        "--keepalive",
-        default=None,
-        type=str,
-        help="How long to keep loaded model in memory (Ollama only), for example '5m' or '1h' or '3600' (seconds)",
     )
     parser.add_argument(
         "--no-think",

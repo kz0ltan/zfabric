@@ -1,0 +1,31 @@
+logging:
+  loglevel: 10
+
+pattern_paths:
+- ./server/patterns
+- ./server/local/patterns
+context_paths:
+- ./local/contexts
+
+db: 
+  path: ~/.local/share/zfabric/sessions.sqlite3
+
+llm:
+  default_profile: local_openai
+  profiles:
+    local_openai:
+        type: openai
+        default_model: GPT-OSS-120b-GGUF-MXFP4
+        config:
+          base_url: http://127.0.0.1:8080/v1
+          api_key: asdf
+    anthropic:
+      type: anthropic
+      default_model: claude-sonnet-4-5-20250929
+      config:
+        api_key: asdf
+
+users:
+  kzoltan:
+    realname: John Doe
+    api_key: asdf

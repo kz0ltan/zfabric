@@ -3,15 +3,16 @@
 import json
 import logging
 import os
-from typing import Optional
 import traceback
+from typing import Optional
 
 from flask import Flask, jsonify
 
-from server.routes import register_routes
-from server.models import SessionManager, VariableHandler
-from server.services import Generator
-from server.helpers import load_file
+from .generator import Generator
+from .lib.servicekit.utils import load_config
+from .routes import register_routes
+from .session_manager import SessionManager
+from .variable_handler import VariableHandler
 
 
 class FabricAPIServer:
@@ -20,10 +21,10 @@ class FabricAPIServer:
     def __init__(self, name: str = "zFabric", config_path: Optional[str] = None):
         if config_path is None:
             config_path = os.getenv("CONFIG_PATH")
-        self.config = json.loads(load_file(config_path))
+        self.config = load_config(config_path)
 
         self.app = Flask(name)
-        self.app.logger.setLevel(self.config.get("loglevel", logging.INFO))
+        self.app.logger.setLevel(self.config.get("logging.loglevel", logging.INFO))
         register_routes(self)
         self.add_errorhandlers()
 
@@ -33,7 +34,7 @@ class FabricAPIServer:
 
     def check_auth_token(self, token: str):
         """Verify authentication token"""
-        user_db = self.config["users"]
+        user_db = self.config.get("users", default={})
         for user in user_db.keys():
             if user_db[user]["api_key"] == token:
                 return user
@@ -50,9 +51,7 @@ class FabricAPIServer:
         def handle_exception(exception):
             self.app.logger.error("Error occured: %s", exception)
             stack_trace = "".join(
-                traceback.format_exception(
-                    type(exception), exception, exception.__traceback__
-                )
+                traceback.format_exception(type(exception), exception, exception.__traceback__)
             )
             self.app.logger.debug(stack_trace)
 

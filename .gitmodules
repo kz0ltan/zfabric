@@ -1,3 +1,6 @@
 [submodule "tools"]
 	path = tools
 	url = https://github.com/kz0ltan/zfabric_tools
+[submodule "server/lib/servicekit"]
+	path = server/lib/servicekit
+	url = ssh://kzoltan@git.kzoltan.srv:/opt/git/servicekit

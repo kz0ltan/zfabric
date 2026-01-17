@@ -13,17 +13,15 @@ def parse_arguments():
     parser.add_argument(
         "-l", "--listen", type=str, default="localhost", help="Hostname/IP to listen on"
     )
-    parser.add_argument(
-        "-p", "--port", type=int, default=13337, help="Port to listen on"
-    )
+    parser.add_argument("-p", "--port", type=int, default=13337, help="Port to listen on")
     parser.add_argument(
         "-d", "--debug", action="store_true", default=False, help="Werkzeug debug mode"
     )
     parser.add_argument(
         "-c",
         "--config",
-        default="./config.json",
-        help="Path to config JSON file",
+        default="./config.yaml",
+        help="Path to config YAML file",
     )
 
     return parser.parse_args()

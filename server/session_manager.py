@@ -1,18 +1,18 @@
 import logging
 import os
-import re
-from typing import Dict, List, Any
+from typing import List
 
 from flask.logging import default_handler
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_core.messages.chat import ChatMessage
 from langchain_core.messages.utils import merge_message_runs
-from langchain_community.chat_message_histories import SQLChatMessageHistory
-from sqlalchemy import create_engine, select, distinct, MetaData, delete, desc
+from sqlalchemy import MetaData, create_engine, delete, desc, distinct, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
-from server.helpers import ensure_directories_exist
-from server.lib.langchain import ExMessageConverter
+from .config import Config
+from .helpers import ensure_directories_exist
+from .lib.langchain import ExMessageConverter
 
 
 class SessionManager:
@@ -22,10 +22,10 @@ class SessionManager:
     * Works with langchain to store / retrieve sessions
     """
 
-    def __init__(self, config: Dict[Any, Any]):
-        self.db_path = config.get("sqlite3_db_path", "~/.local/share/zfabric/sessions.sqlite3")
-        self.table_name = config.get("sqlite3_table_name", "message_store")
-        self.session_id_field_name = config.get("sqlite3_session_id_field_name", "session_id")
+    def __init__(self, config: Config):
+        self.db_path = config.get("db.path", "~/.local/share/zfabric/sessions.sqlite3")
+        self.table_name = config.get("db.table_name", "message_store")
+        self.session_id_field_name = config.get("db.session_id_field_name", "session_id")
         self._db_connection = None
         self.metadata = None
         self.table = None
@@ -34,7 +34,7 @@ class SessionManager:
 
         self.logger = logging.getLogger("app.variables")
         self.logger.addHandler(default_handler)
-        self.logger.setLevel(self.config.get("loglevel", logging.INFO))
+        self.logger.setLevel(self.config.get("logging.loglevel", default=logging.INFO))
 
     @property
     def db_connection(self):
@@ -147,104 +147,6 @@ class SessionManager:
             result = result.scalar_one_or_none()
 
             if not result:
-                self.logger.info(f"No sessions were found in the DB.")
+                self.logger.info("No sessions were found in the DB.")
 
             return result
-
-
-class VariableHandler:
-    """Handles variable replacements in text"""
-
-    def __init__(self, config):
-        self.config = config
-
-        self.logger = logging.getLogger("app.variables")
-        self.logger.addHandler(default_handler)
-        self.logger.setLevel(self.config.get("loglevel", logging.INFO))
-
-    def coalesce_data(self, data: Dict[str, str]):
-        """Joins data values into one data["input"]"""
-        if len(data) == 1 and list(data.keys())[0] == "input":
-            return data["input"]
-
-        if "input" not in data:
-            data["input"] = ""
-
-        for source in list(data.keys()):
-            if source == "input":
-                continue
-
-            if len(data["input"]) == 0:
-                data["input"] = data[source]
-            else:
-                data["input"] += "\n\n" + data[source]
-            del data[source]
-
-        return data["input"]
-
-    def insert_data_into_template_with_globbing(self, template: str, data: Dict[str, str]) -> str:
-        """
-        Replace {{  }} expressions in template from data[] using regular expressions.
-        Replaced keys should be deleted from data.
-        """
-        pattern = re.compile(r"{{\s*([\w\d_*?]+)\s*}}")
-
-        def matches_pattern(key: str, pattern: str) -> bool:
-            """Check if the key matches the glob pattern."""
-            if pattern == "*":
-                return True
-            if not pattern:
-                return False
-
-            # Convert glob pattern to regex
-            regex_pattern = "^" + re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".") + "$"
-            return re.match(regex_pattern, key) is not None
-
-        def replace_match(match):
-            # this returns only the matched key, without {{ and }}
-            glob_key = match.group(1)
-            matched_values = []
-
-            # Find all keys that match the glob pattern and join
-            for key in list(data.keys()):
-                if matches_pattern(key, glob_key):
-                    matched_values.append(data.pop(key))
-                    self.logger.debug("Input data inserted: %s", key)
-
-            # If we found any matches, return them joined
-            if len(matched_values) > 0:
-                return "\n\n".join(matched_values)
-
-            # Return the original match if no keys matched
-            return match.group(0)
-
-        return re.sub(pattern, replace_match, template)
-
-    def resolve(
-        self,
-        template: str,
-        variables: Dict[str, str],
-        data: Dict[str, str],
-        coalesce_data: bool = False,
-    ):
-        """
-        Replace variables in template (text)
-        If <var_name> exists in variables, replace, otherwise leave {{ var_name }} in template
-        """
-        self.logger.debug("Variables replaced: %s", variables)
-        template = re.sub(
-            r"{{\s*([\w\d_]+)\s*}}",
-            lambda match: str(variables.get(match.group(1), match.group(0))),
-            template,
-        )
-
-        template = self.insert_data_into_template_with_globbing(template, data)
-
-        if coalesce_data and len(data):
-            return (
-                template + "\n\n" + self.coalesce_data(data)
-                if len(template)
-                else self.coalesce_data(data)
-            )
-
-        return template
