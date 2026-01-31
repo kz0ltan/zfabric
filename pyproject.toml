@@ -23,7 +23,6 @@ dependencies = [
 members = [
     "tools",
     "server/lib/servicekit",
-    "server/agents/open_deep_research",
 ]
 
 [tool.uv.sources]
