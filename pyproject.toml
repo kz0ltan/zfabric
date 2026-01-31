@@ -16,7 +16,6 @@ dependencies = [
     "tiktoken>=0.12.0",
     "tools",
     "servicekit",
-    "open_deep_research",
 ]
 
 [tool.uv.workspace]
@@ -28,7 +27,6 @@ members = [
 [tool.uv.sources]
 tools = { workspace = true }
 servicekit = { workspace = true }
-open-deep-research = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -36,4 +34,4 @@ dev = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["zfabric", "tools", "servicekit", "open_deep_research"]
+known-first-party = ["zfabric", "tools", "servicekit"]
