@@ -5,5 +5,5 @@ logs/*
 server/local
 server/local/**
 venv
-.aider*
 tmp/*
+**/__pycache__
