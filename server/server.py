@@ -19,7 +19,7 @@ from .variable_handler import VariableHandler
 class FabricAPIServer:
     """Flask API server implementing all the server-side functionality of zFabric"""
 
-    def __init__(self, name: str = "zFabric", config_path: Optional[str] = None):
+    def __init__(self, name: str = "zFabric", config_path: Optional[str] = "config.yaml"):
         if config_path is None:
             config_path = os.getenv("CONFIG_PATH")
         self.config = load_config(config_path)
