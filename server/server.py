@@ -8,8 +8,9 @@ from typing import Optional
 
 from flask import Flask, jsonify
 
+from servicekit.utils import load_config
+
 from .generator import Generator
-from .lib.servicekit.utils import load_config
 from .routes import register_routes
 from .session_manager import SessionManager
 from .variable_handler import VariableHandler
@@ -55,8 +56,7 @@ class FabricAPIServer:
             )
             self.app.logger.debug(stack_trace)
 
-            # stream = request.args.get(
-            #    "stream", "false").lower() in ("true", "1")
+            # stream = request.args.get("stream", "false").lower() in ("true", "1")
             # if stream:
             #    def generate_error():
             #        yield json.dumps({"error": "An error occurred while processing the request"})

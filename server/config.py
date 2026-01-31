@@ -1,8 +1,7 @@
 from typing import Dict, List
 
 from pydantic import BaseModel
-
-from server.lib.servicekit import Configuration
+from servicekit import Configuration
 
 
 class DBConfig(BaseModel):

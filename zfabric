@@ -772,6 +772,7 @@ def parse_cli_args(command_args=None):
         "--delete", default=False, action="store_true", help="Used to delete a session"
     )
     group.add_argument("-p", "--pattern", default=None, help="Pattern to use")
+    group.add_argument("-a", "--agent", default=None, help="Agent to launch")
     group.add_argument(
         "--tokens",
         default=False,
@@ -811,7 +812,6 @@ def parse_cli_args(command_args=None):
         help="Start chat session",
     )
     parser.add_argument(
-        "-a",
         "--attachment",
         type=file_exists,
         action="append",

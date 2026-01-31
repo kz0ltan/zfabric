@@ -15,9 +15,7 @@ To download repo::
 
 To install the required libraries::
 
-    python3 -m venv ~/.virtualenvs/zfabric
-    source ~/.virtualenvs/zfabric/bin/activate
-    pip3 install -r requirements
+    uv sync
 
 ### Server
 
@@ -61,3 +59,9 @@ Delete the repository, and the client config file from ~/.config/zFabric/.env
 To run the local server::
 
     ./app.py -d
+
+Running workspace dependencies::
+
+    uv run -m tools.extract.reddit -h
+    uv run -m tools.extract.web -h
+    uv run -m open_deep_research

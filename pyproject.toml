@@ -8,26 +8,33 @@ dependencies = [
     "anthropic>=0.76.0",
     "flask>=3.1.2",
     "langchain>=1.2.6",
-    "langchain-anthropic>=1.3.1",
     "langchain-community>=0.4.1",
-    "langchain-openai>=1.1.7",
     "langchain-text-splitters>=1.1.0",
     "openai>=2.15.0",
     "pyperclip>=1.11.0",
     "python-dotenv>=1.2.1",
     "tiktoken>=0.12.0",
     "tools",
+    "servicekit",
+    "open_deep_research",
 ]
 
 [tool.uv.workspace]
 members = [
     "tools",
+    "server/lib/servicekit",
+    "server/agents/open_deep_research",
 ]
 
 [tool.uv.sources]
 tools = { workspace = true }
+servicekit = { workspace = true }
+open-deep-research = { workspace = true }
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["zfabric", "tools", "servicekit", "open_deep_research"]

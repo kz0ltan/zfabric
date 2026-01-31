@@ -8,10 +8,10 @@ from typing import Dict, List, Optional
 from flask import jsonify, request
 from langchain_core.messages import message_to_dict
 from langchain_core.messages.chat import ChatMessage
+from servicekit.utils import load_file
 
 from .decorators import auth_required
 from .helpers import merge_dicts
-from .lib.servicekit.utils import load_file
 
 
 def register_routes(server):
