@@ -7,4 +7,3 @@ server/local
 server/local/**
 venv
 tmp/*
-**/__pycache__
