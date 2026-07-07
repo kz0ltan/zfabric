@@ -1,9 +1,11 @@
-/config.yaml
-config.json
 **/__pycache__
-**/.mypy_cache
+.venv
+
+# ignore config
+config.yaml
+config.json
+
+# project specific dirs
 logs/*
 server/local
 server/local/**
-venv
-tmp/*

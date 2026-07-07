@@ -128,7 +128,8 @@ def get_web_data(web_url: str):
     """Wrapper to external function that scrapes a URL and returns text"""
     from tools.extract import web
 
-    _, content = web.WebExtractor().extract(web_url)
+    profile = os.getenv("JINA_PROFILE")
+    _, content = web.WebExtractor(jina_profile=profile).extract(web_url)
     return content
 
 
